@@ -2,11 +2,30 @@
 
 A custom operating system built from first principles in Rust and C, inspired by early UNIX and Linux.
 
-## Current Status: Enhanced Foundation Phase (v0.2.0)
+## Current Status: Advanced Feature Phase (v0.3.0)
 
-m5rOS is in early development. The core build system, kernel skeleton, interactive command system, RTC support, and ATA disk driver have been established.
+m5rOS has progressed to include a professional boot animation, vi-like text editor, virtual filesystem, comprehensive file operations, and system installer framework.
 
 ### ✅ Implemented Components
+
+#### Boot Animation & Service Manager
+- **Professional boot animation** with m5rOS ASCII art logo
+- **Service initialization display** mimicking Linux distros
+- **Visual status indicators** (STARTING → OK/FAILED)
+- **10 tracked services**: GDT, IDT, PIC, PIT, Keyboard, Serial, RTC, ATA, Memory Manager, Virtual Memory
+
+#### Text Editor (m5edit)
+- **Vi-like editor** with Normal, Insert, and Command modes
+- **Navigation**: hjkl keys for cursor movement
+- **Editing**: character insertion, deletion, line operations
+- **Commands**: :w (save), :q (quit), :wq (save & quit), :q! (force quit)
+- **Status line**: mode indicator and file modification state
+
+#### Virtual Filesystem (SimpleFS)
+- **In-memory filesystem** with 64 file/directory entries
+- **File operations**: create, read, write, delete, find
+- **Directory support**: create directories, list contents
+- **Storage**: 32KB per file, 2MB total capacity
 
 #### Build System & Infrastructure
 - Cargo workspace for Rust components (kernel, bootloader)
@@ -37,17 +56,23 @@ m5rOS is in early development. The core build system, kernel skeleton, interacti
 - **ATA PIO driver** for IDE hard disk access (identify, read, write sectors)
 - **Framebuffer graphics** with RGB/BGR pixel format support
 
-#### Interactive Command System
+#### Interactive Command System (22 commands)
 - **Command parser** with keyboard input buffering
-- **Built-in commands** (15 total):
-  - System info: `fetch`, `help`, `about`, `version`, `uptime`
-  - Hardware: `cpuinfo`, `meminfo`, `stats`, `heap`
-  - Time: `date`, `time` (using RTC)
-  - Utilities: `clear`, `echo`
-  - Power: `reboot`, `shutdown`
-- **fastfetch-like system information** display with ASCII art
+- **System info**: fetch, help, about, version, uptime
+- **Hardware**: cpuinfo, meminfo, stats, heap
+- **Time**: date, time (using RTC)
+- **File operations**: ls, cat, mkdir, touch, rm, edit
+- **Utilities**: clear, echo
+- **Power**: reboot, shutdown
+- **Installation**: install-m5ros
+- **Color-coded categorized help** display
 - **Statistics tracking** for IRQs and exceptions
-- **Color-coded output** for better readability
+
+#### System Installer
+- **Installation wizard** with professional UI
+- **ATA drive detection** and identification
+- **Installation steps** outlined (partition, format, bootloader, copy)
+- **Framework ready** for bootloader integration
 
 ### 🚧 In Progress
 
