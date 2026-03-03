@@ -1,7 +1,5 @@
 #![no_std]
 #![no_main]
-// Will need abi_x86_interrupt feature for interrupt handling in Phase 5
-// #![feature(abi_x86_interrupt)]
 
 use core::panic::PanicInfo;
 
@@ -22,7 +20,38 @@ pub extern "C" fn kernel_main() -> ! {
 
     // Print boot message
     drivers::serial::write_str("m5rOS v0.1.0 - Booting...\n");
+
+    // Initialize VGA text mode
+    // SAFETY: This is called once during kernel initialization
+    unsafe {
+        drivers::vga::init();
+    }
+    drivers::vga::clear_screen();
+    drivers::vga::write_str("m5rOS v0.1.0\n");
+    drivers::vga::write_str("=============\n\n");
+
+    drivers::serial::write_str("Initializing GDT...\n");
+    drivers::vga::write_str("Initializing GDT...\n");
+    // Initialize GDT
+    // SAFETY: This is called once during kernel initialization
+    unsafe {
+        arch::gdt::init();
+    }
+
+    drivers::serial::write_str("Initializing IDT...\n");
+    drivers::vga::write_str("Initializing IDT...\n");
+    // Initialize IDT
+    // SAFETY: This is called once during kernel initialization
+    unsafe {
+        arch::idt::init();
+    }
+
     drivers::serial::write_str("Kernel initialized successfully\n");
+    drivers::vga::write_str("Kernel initialized successfully!\n\n");
+
+    drivers::vga::set_color(drivers::vga::Color::LightGreen, drivers::vga::Color::Black);
+    drivers::vga::write_str("All systems operational.\n");
+    drivers::vga::set_color(drivers::vga::Color::White, drivers::vga::Color::Black);
 
     // Halt the CPU
     loop {
