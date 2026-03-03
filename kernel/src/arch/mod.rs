@@ -4,6 +4,7 @@ pub mod cpuid;
 pub mod gdt;
 pub mod idt;
 pub mod interrupts;
+pub mod pci;
 pub mod pic;
 pub mod pit;
 pub mod port;

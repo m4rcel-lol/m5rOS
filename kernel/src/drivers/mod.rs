@@ -7,3 +7,6 @@ pub mod ata;
 pub mod framebuffer;
 pub mod rtc;
 pub mod e1000;
+pub mod igpu;
+pub mod wifi;
+pub mod bluetooth;
