@@ -105,6 +105,12 @@ pub fn execute_command(cmd: &str) {
         "ping" => cmd_ping(rest),
         "arp" => cmd_arp(),
         "netinit" => cmd_netinit(rest),
+        "lspci" => cmd_lspci(),
+        "gpuinfo" => cmd_gpuinfo(),
+        "wifiinfo" => cmd_wifiinfo(),
+        "wifiscan" => cmd_wifiscan(),
+        "btinfo" => cmd_btinfo(),
+        "btscan" => cmd_btscan(),
         _ => {
             vga::write_str("Unknown command: ");
             vga::write_str(command);
@@ -254,12 +260,26 @@ fn cmd_help() {
     vga::write_str("  install-m5ros - Install m5rOS to disk\n\n");
 
     vga::set_color(vga::Color::LightCyan, vga::Color::Black);
+    vga::write_str("Hardware:\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str("  lspci    - List all PCI devices\n");
+    vga::write_str("  gpuinfo  - Display integrated graphics info\n\n");
+
+    vga::set_color(vga::Color::LightCyan, vga::Color::Black);
     vga::write_str("Network:\n");
     vga::set_color(vga::Color::White, vga::Color::Black);
     vga::write_str("  netinit  - Initialize network card\n");
     vga::write_str("  ifconfig - Configure network interface\n");
     vga::write_str("  ping     - Send ICMP echo request\n");
-    vga::write_str("  arp      - Display ARP cache\n");
+    vga::write_str("  arp      - Display ARP cache\n\n");
+
+    vga::set_color(vga::Color::LightCyan, vga::Color::Black);
+    vga::write_str("Wireless:\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str("  wifiinfo - Display Wi-Fi adapter information\n");
+    vga::write_str("  wifiscan - Scan for Wi-Fi networks\n");
+    vga::write_str("  btinfo   - Display Bluetooth adapter info\n");
+    vga::write_str("  btscan   - Scan for Bluetooth devices\n");
     vga::write_str("\n");
 }
 
@@ -1132,6 +1152,454 @@ fn format_u8(value: u8) {
     } else {
         let buf = [(b'0' + value)];
         if let Ok(s) = core::str::from_utf8(&buf) {
+            vga::write_str(s);
+        }
+    }
+}
+
+/// List all PCI devices
+fn cmd_lspci() {
+    use crate::arch::pci;
+
+    vga::write_str("PCI Devices:\n");
+    vga::write_str("-----------\n");
+
+    let devices = pci::enumerate_devices();
+
+    if devices.iter().all(|d| d.is_none()) {
+        vga::write_str("No PCI devices found.\n");
+        return;
+    }
+
+    for device_opt in &devices {
+        if let Some(device) = device_opt {
+            // Format: Bus:Slot.Func VendorID:DeviceID Class: Description
+            vga::write_str("  ");
+            format_hex_u8(device.bus);
+            vga::write_str(":");
+            format_hex_u8(device.slot);
+            vga::write_str(".");
+            format_u8(device.function);
+            vga::write_str(" ");
+
+            format_hex_u16(device.vendor_id);
+            vga::write_str(":");
+            format_hex_u16(device.device_id);
+            vga::write_str(" ");
+
+            vga::write_str(pci::get_class_name(device.class_code));
+            vga::write_str(" - ");
+            vga::write_str(pci::get_vendor_name(device.vendor_id));
+            vga::write_str("\n");
+        }
+    }
+
+    vga::write_str("\n");
+}
+
+/// Display integrated GPU information
+fn cmd_gpuinfo() {
+    use crate::drivers::igpu;
+
+    vga::set_color(vga::Color::LightCyan, vga::Color::Black);
+    vga::write_str("Integrated Graphics Information\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str("================================\n\n");
+
+    if !igpu::is_initialized() {
+        vga::write_str("Attempting to initialize integrated graphics...\n");
+        unsafe {
+            match igpu::init() {
+                Ok(_) => {
+                    vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+                    vga::write_str("Successfully initialized!\n\n");
+                    vga::set_color(vga::Color::White, vga::Color::Black);
+                }
+                Err(e) => {
+                    vga::set_color(vga::Color::LightRed, vga::Color::Black);
+                    vga::write_str("Error: ");
+                    vga::write_str(e);
+                    vga::write_str("\n");
+                    vga::set_color(vga::Color::White, vga::Color::Black);
+                    return;
+                }
+            }
+        }
+    }
+
+    if let Some(info) = igpu::get_info() {
+        vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+        vga::write_str("Vendor:       ");
+        vga::set_color(vga::Color::White, vga::Color::Black);
+        vga::write_str(igpu::get_vendor_name());
+        vga::write_str("\n");
+
+        vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+        vga::write_str("Device:       ");
+        vga::set_color(vga::Color::White, vga::Color::Black);
+        vga::write_str(igpu::get_description());
+        vga::write_str("\n");
+
+        vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+        vga::write_str("Device ID:    ");
+        vga::set_color(vga::Color::White, vga::Color::Black);
+        format_hex_u16(info.device_id);
+        vga::write_str("\n");
+
+        vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+        vga::write_str("Framebuffer:  ");
+        vga::set_color(vga::Color::White, vga::Color::Black);
+        format_hex_u64(info.framebuffer_addr);
+        vga::write_str(" (");
+        format_size(info.framebuffer_size as u64);
+        vga::write_str(")\n");
+    }
+
+    vga::write_str("\n");
+}
+
+/// Display Wi-Fi information
+fn cmd_wifiinfo() {
+    use crate::drivers::wifi;
+
+    vga::set_color(vga::Color::LightCyan, vga::Color::Black);
+    vga::write_str("Wi-Fi Information\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str("=================\n\n");
+
+    if !wifi::is_initialized() {
+        vga::write_str("Attempting to initialize Wi-Fi driver...\n");
+        unsafe {
+            match wifi::init() {
+                Ok(_) => {
+                    vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+                    vga::write_str("Successfully initialized!\n\n");
+                    vga::set_color(vga::Color::White, vga::Color::Black);
+                }
+                Err(e) => {
+                    vga::set_color(vga::Color::LightRed, vga::Color::Black);
+                    vga::write_str("Error: ");
+                    vga::write_str(e);
+                    vga::write_str("\n");
+                    vga::set_color(vga::Color::White, vga::Color::Black);
+                    return;
+                }
+            }
+        }
+    }
+
+    vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+    vga::write_str("Device:       ");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str("Realtek RTL8852BE\n");
+
+    vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+    vga::write_str("Standards:    ");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str(wifi::get_supported_standards());
+    vga::write_str("\n");
+
+    vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+    vga::write_str("Max Speed:    ");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str(wifi::get_max_throughput());
+    vga::write_str("\n");
+
+    vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+    vga::write_str("State:        ");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    match wifi::get_state() {
+        wifi::WifiState::Uninitialized => vga::write_str("Uninitialized"),
+        wifi::WifiState::Initialized => vga::write_str("Initialized"),
+        wifi::WifiState::Scanning => vga::write_str("Scanning"),
+        wifi::WifiState::Connecting => vga::write_str("Connecting"),
+        wifi::WifiState::Connected => vga::write_str("Connected"),
+        wifi::WifiState::Disconnected => vga::write_str("Disconnected"),
+    }
+    vga::write_str("\n");
+
+    if wifi::is_connected() {
+        vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+        vga::write_str("Signal:       ");
+        vga::set_color(vga::Color::White, vga::Color::Black);
+        let signal = wifi::get_signal_strength();
+        if signal > -50 {
+            vga::write_str("Excellent");
+        } else if signal > -60 {
+            vga::write_str("Good");
+        } else if signal > -70 {
+            vga::write_str("Fair");
+        } else {
+            vga::write_str("Weak");
+        }
+        vga::write_str(" (");
+        format_i8(signal);
+        vga::write_str(" dBm)\n");
+    }
+
+    vga::write_str("\n");
+}
+
+/// Scan for Wi-Fi networks
+fn cmd_wifiscan() {
+    use crate::drivers::wifi;
+
+    vga::write_str("Scanning for Wi-Fi networks...\n");
+
+    if !wifi::is_initialized() {
+        vga::set_color(vga::Color::LightRed, vga::Color::Black);
+        vga::write_str("Error: Wi-Fi driver not initialized. Run 'wifiinfo' first.\n");
+        vga::set_color(vga::Color::White, vga::Color::Black);
+        return;
+    }
+
+    match wifi::scan_networks() {
+        Ok(networks) => {
+            if networks.iter().all(|n| n.is_none()) {
+                vga::write_str("No networks found.\n");
+                vga::write_str("\n");
+                vga::set_color(vga::Color::Yellow, vga::Color::Black);
+                vga::write_str("Note: Wi-Fi scanning requires firmware and hardware-specific\n");
+                vga::write_str("      implementation. This is a driver skeleton.\n");
+                vga::set_color(vga::Color::White, vga::Color::Black);
+            } else {
+                vga::write_str("\nAvailable Networks:\n");
+                vga::write_str("-------------------\n");
+                for network_opt in &networks {
+                    if let Some(network) = network_opt {
+                        vga::write_str("  SSID: ");
+                        let ssid = core::str::from_utf8(&network.ssid[..network.ssid_len])
+                            .unwrap_or("<invalid>");
+                        vga::write_str(ssid);
+                        vga::write_str(" (Channel ");
+                        format_u8(network.channel);
+                        vga::write_str(", Signal: ");
+                        format_i8(network.signal_strength);
+                        vga::write_str(" dBm)\n");
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            vga::set_color(vga::Color::LightRed, vga::Color::Black);
+            vga::write_str("Error: ");
+            vga::write_str(e);
+            vga::write_str("\n");
+            vga::set_color(vga::Color::White, vga::Color::Black);
+        }
+    }
+
+    vga::write_str("\n");
+}
+
+/// Display Bluetooth information
+fn cmd_btinfo() {
+    use crate::drivers::bluetooth;
+
+    vga::set_color(vga::Color::LightCyan, vga::Color::Black);
+    vga::write_str("Bluetooth Information\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str("=====================\n\n");
+
+    if !bluetooth::is_initialized() {
+        vga::write_str("Attempting to initialize Bluetooth driver...\n");
+        unsafe {
+            match bluetooth::init() {
+                Ok(_) => {
+                    vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+                    vga::write_str("Successfully initialized!\n\n");
+                    vga::set_color(vga::Color::White, vga::Color::Black);
+                }
+                Err(e) => {
+                    vga::set_color(vga::Color::LightRed, vga::Color::Black);
+                    vga::write_str("Error: ");
+                    vga::write_str(e);
+                    vga::write_str("\n");
+                    vga::set_color(vga::Color::White, vga::Color::Black);
+                    return;
+                }
+            }
+        }
+    }
+
+    vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+    vga::write_str("Device:       ");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str("Realtek RTL8852BE\n");
+
+    vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+    vga::write_str("Version:      ");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str(bluetooth::get_version_string());
+    vga::write_str("\n");
+
+    vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+    vga::write_str("Features:     ");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str(bluetooth::get_features());
+    vga::write_str("\n");
+
+    vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+    vga::write_str("Profiles:     ");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str(bluetooth::get_supported_profiles());
+    vga::write_str("\n");
+
+    vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+    vga::write_str("State:        ");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    match bluetooth::get_state() {
+        bluetooth::BluetoothState::Uninitialized => vga::write_str("Uninitialized"),
+        bluetooth::BluetoothState::Initialized => vga::write_str("Initialized"),
+        bluetooth::BluetoothState::Scanning => vga::write_str("Scanning"),
+        bluetooth::BluetoothState::Connecting => vga::write_str("Connecting"),
+        bluetooth::BluetoothState::Connected => vga::write_str("Connected"),
+        bluetooth::BluetoothState::Disconnected => vga::write_str("Disconnected"),
+    }
+    vga::write_str("\n");
+
+    vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+    vga::write_str("Name:         ");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str(bluetooth::get_device_name());
+    vga::write_str("\n");
+
+    vga::write_str("\n");
+}
+
+/// Scan for Bluetooth devices
+fn cmd_btscan() {
+    use crate::drivers::bluetooth;
+
+    vga::write_str("Scanning for Bluetooth devices...\n");
+
+    if !bluetooth::is_initialized() {
+        vga::set_color(vga::Color::LightRed, vga::Color::Black);
+        vga::write_str("Error: Bluetooth driver not initialized. Run 'btinfo' first.\n");
+        vga::set_color(vga::Color::White, vga::Color::Black);
+        return;
+    }
+
+    match bluetooth::scan_devices(5000) {
+        Ok(devices) => {
+            if devices.iter().all(|d| d.is_none()) {
+                vga::write_str("No devices found.\n");
+                vga::write_str("\n");
+                vga::set_color(vga::Color::Yellow, vga::Color::Black);
+                vga::write_str("Note: Bluetooth scanning requires firmware and HCI\n");
+                vga::write_str("      implementation. This is a driver skeleton.\n");
+                vga::set_color(vga::Color::White, vga::Color::Black);
+            } else {
+                vga::write_str("\nDiscovered Devices:\n");
+                vga::write_str("-------------------\n");
+                for device_opt in &devices {
+                    if let Some(device) = device_opt {
+                        vga::write_str("  ");
+                        let name = core::str::from_utf8(&device.name[..device.name_len])
+                            .unwrap_or("<unknown>");
+                        vga::write_str(name);
+                        vga::write_str(" (");
+                        for (i, &byte) in device.address.iter().enumerate() {
+                            if i > 0 {
+                                vga::write_str(":");
+                            }
+                            format_hex_u8(byte);
+                        }
+                        vga::write_str(", RSSI: ");
+                        format_i8(device.rssi);
+                        vga::write_str(" dBm)\n");
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            vga::set_color(vga::Color::LightRed, vga::Color::Black);
+            vga::write_str("Error: ");
+            vga::write_str(e);
+            vga::write_str("\n");
+            vga::set_color(vga::Color::White, vga::Color::Black);
+        }
+    }
+
+    vga::write_str("\n");
+}
+
+/// Format an i8 value
+fn format_i8(value: i8) {
+    if value < 0 {
+        vga::write_str("-");
+        format_u8((-value) as u8);
+    } else {
+        format_u8(value as u8);
+    }
+}
+
+/// Format size in bytes
+fn format_size(bytes: u64) {
+    if bytes >= 1024 * 1024 * 1024 {
+        let gb = bytes / (1024 * 1024 * 1024);
+        format_u64(gb);
+        vga::write_str(" GB");
+    } else if bytes >= 1024 * 1024 {
+        let mb = bytes / (1024 * 1024);
+        format_u64(mb);
+        vga::write_str(" MB");
+    } else if bytes >= 1024 {
+        let kb = bytes / 1024;
+        format_u64(kb);
+        vga::write_str(" KB");
+    } else {
+        format_u64(bytes);
+        vga::write_str(" B");
+    }
+}
+
+/// Format u64 as hexadecimal
+fn format_hex_u64(value: u64) {
+    vga::write_str("0x");
+    for i in (0..16).rev() {
+        let nibble = ((value >> (i * 4)) & 0xF) as u8;
+        let ch = if nibble < 10 {
+            b'0' + nibble
+        } else {
+            b'A' + (nibble - 10)
+        };
+        let s = [ch];
+        if let Ok(s) = core::str::from_utf8(&s) {
+            vga::write_str(s);
+        }
+    }
+}
+
+/// Format u16 as hexadecimal
+fn format_hex_u16(value: u16) {
+    vga::write_str("0x");
+    for i in (0..4).rev() {
+        let nibble = ((value >> (i * 4)) & 0xF) as u8;
+        let ch = if nibble < 10 {
+            b'0' + nibble
+        } else {
+            b'A' + (nibble - 10)
+        };
+        let s = [ch];
+        if let Ok(s) = core::str::from_utf8(&s) {
+            vga::write_str(s);
+        }
+    }
+}
+
+/// Format u8 as hexadecimal
+fn format_hex_u8(value: u8) {
+    vga::write_str("0x");
+    for i in (0..2).rev() {
+        let nibble = ((value >> (i * 4)) & 0xF) as u8;
+        let ch = if nibble < 10 {
+            b'0' + nibble
+        } else {
+            b'A' + (nibble - 10)
+        };
+        let s = [ch];
+        if let Ok(s) = core::str::from_utf8(&s) {
             vga::write_str(s);
         }
     }
