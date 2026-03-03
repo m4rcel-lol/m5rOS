@@ -46,6 +46,9 @@ pub extern "C" fn kernel_main() -> ! {
         arch::idt::init();
     }
 
+    // Note: Heap initialization requires proper paging setup first
+    // This will be enabled once we have a working bootloader and paging
+
     drivers::serial::write_str("Kernel initialized successfully\n");
     drivers::vga::write_str("Kernel initialized successfully!\n\n");
 
