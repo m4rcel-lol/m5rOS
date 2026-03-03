@@ -8,6 +8,7 @@ use crate::stats;
 use crate::drivers::rtc;
 use crate::fs;
 use crate::editor;
+use crate::net;
 
 /// Maximum command buffer size
 const CMD_BUF_SIZE: usize = 256;
@@ -100,6 +101,10 @@ pub fn execute_command(cmd: &str) {
         "rm" => cmd_rm(rest),
         "edit" => cmd_edit(rest),
         "install-m5ros" => cmd_install(),
+        "ifconfig" => cmd_ifconfig(rest),
+        "ping" => cmd_ping(rest),
+        "arp" => cmd_arp(),
+        "netinit" => cmd_netinit(rest),
         _ => {
             vga::write_str("Unknown command: ");
             vga::write_str(command);
@@ -246,7 +251,15 @@ fn cmd_help() {
     vga::set_color(vga::Color::LightCyan, vga::Color::Black);
     vga::write_str("System Installation:\n");
     vga::set_color(vga::Color::White, vga::Color::Black);
-    vga::write_str("  install-m5ros - Install m5rOS to disk\n");
+    vga::write_str("  install-m5ros - Install m5rOS to disk\n\n");
+
+    vga::set_color(vga::Color::LightCyan, vga::Color::Black);
+    vga::write_str("Network:\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str("  netinit  - Initialize network card\n");
+    vga::write_str("  ifconfig - Configure network interface\n");
+    vga::write_str("  ping     - Send ICMP echo request\n");
+    vga::write_str("  arp      - Display ARP cache\n");
     vga::write_str("\n");
 }
 
@@ -752,4 +765,374 @@ fn cmd_install() {
     vga::set_color(vga::Color::LightCyan, vga::Color::Black);
     vga::write_str("Installation framework ready - awaiting component completion.\n\n");
     vga::set_color(vga::Color::White, vga::Color::Black);
+}
+
+/// Initialize network card
+fn cmd_netinit(args: &str) {
+    vga::write_str("\n");
+    vga::set_color(vga::Color::LightCyan, vga::Color::Black);
+    vga::write_str("Network Initialization\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str("======================\n\n");
+
+    // Parse I/O base from args, default to 0xC000 (QEMU E1000)
+    let io_base: u16 = if !args.is_empty() {
+        // Try to parse hex or decimal
+        if args.starts_with("0x") {
+            u16::from_str_radix(&args[2..], 16).unwrap_or(0xC000)
+        } else {
+            args.parse().unwrap_or(0xC000)
+        }
+    } else {
+        0xC000 // Default QEMU E1000 I/O base
+    };
+
+    vga::write_str("Initializing E1000 at I/O base 0x");
+    crate::util::write_hex_u16(io_base);
+    vga::write_str("...\n");
+
+    unsafe {
+        match crate::drivers::e1000::init(io_base) {
+            Ok(_) => {
+                vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+                vga::write_str("SUCCESS: ");
+                vga::set_color(vga::Color::White, vga::Color::Black);
+                vga::write_str("Network card initialized\n");
+
+                let mac = crate::drivers::e1000::get_mac_address();
+                vga::write_str("MAC Address: ");
+                for i in 0..6 {
+                    crate::util::write_hex_u8(mac[i]);
+                    if i < 5 {
+                        vga::write_str(":");
+                    }
+                }
+                vga::write_str("\n");
+
+                let link_up = crate::drivers::e1000::is_link_up();
+                vga::write_str("Link Status: ");
+                if link_up {
+                    vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+                    vga::write_str("UP\n");
+                } else {
+                    vga::set_color(vga::Color::LightRed, vga::Color::Black);
+                    vga::write_str("DOWN\n");
+                }
+                vga::set_color(vga::Color::White, vga::Color::Black);
+            }
+            Err(e) => {
+                vga::set_color(vga::Color::LightRed, vga::Color::Black);
+                vga::write_str("ERROR: ");
+                vga::set_color(vga::Color::White, vga::Color::Black);
+                vga::write_str(e);
+                vga::write_str("\n");
+            }
+        }
+    }
+
+    vga::write_str("\n");
+}
+
+/// Configure network interface
+fn cmd_ifconfig(args: &str) {
+    use crate::drivers::e1000;
+
+    vga::write_str("\n");
+
+    if args.is_empty() {
+        // Display current configuration
+        vga::set_color(vga::Color::LightCyan, vga::Color::Black);
+        vga::write_str("Network Interface Configuration\n");
+        vga::set_color(vga::Color::White, vga::Color::Black);
+        vga::write_str("================================\n\n");
+
+        if !e1000::is_initialized() {
+            vga::set_color(vga::Color::Yellow, vga::Color::Black);
+            vga::write_str("Network card not initialized. Use 'netinit' first.\n\n");
+            vga::set_color(vga::Color::White, vga::Color::Black);
+            return;
+        }
+
+        let mac = e1000::get_mac_address();
+        vga::write_str("eth0:\n");
+        vga::write_str("  MAC Address: ");
+        for i in 0..6 {
+            crate::util::write_hex_u8(mac[i]);
+            if i < 5 {
+                vga::write_str(":");
+            }
+        }
+        vga::write_str("\n");
+
+        let config = net::get_config();
+        if config.configured {
+            vga::write_str("  IP Address:  ");
+            for i in 0..4 {
+                format_u8(config.ip_addr[i]);
+                if i < 3 {
+                    vga::write_str(".");
+                }
+            }
+            vga::write_str("\n");
+
+            vga::write_str("  Netmask:     ");
+            for i in 0..4 {
+                format_u8(config.subnet_mask[i]);
+                if i < 3 {
+                    vga::write_str(".");
+                }
+            }
+            vga::write_str("\n");
+
+            vga::write_str("  Gateway:     ");
+            for i in 0..4 {
+                format_u8(config.gateway[i]);
+                if i < 3 {
+                    vga::write_str(".");
+                }
+            }
+            vga::write_str("\n");
+        } else {
+            vga::set_color(vga::Color::Yellow, vga::Color::Black);
+            vga::write_str("  Not configured\n");
+            vga::set_color(vga::Color::White, vga::Color::Black);
+        }
+
+        let link_up = e1000::is_link_up();
+        vga::write_str("  Link:        ");
+        if link_up {
+            vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+            vga::write_str("UP\n");
+        } else {
+            vga::set_color(vga::Color::LightRed, vga::Color::Black);
+            vga::write_str("DOWN\n");
+        }
+        vga::set_color(vga::Color::White, vga::Color::Black);
+    } else {
+        // Parse configuration: ifconfig <ip> <netmask> <gateway>
+        let parts: [&str; 3] = {
+            let mut iter = args.split_whitespace();
+            [
+                iter.next().unwrap_or(""),
+                iter.next().unwrap_or(""),
+                iter.next().unwrap_or(""),
+            ]
+        };
+
+        if parts[0].is_empty() || parts[1].is_empty() {
+            vga::write_str("Usage: ifconfig <ip> <netmask> <gateway>\n");
+            vga::write_str("Example: ifconfig 10.0.2.15 255.255.255.0 10.0.2.2\n\n");
+            return;
+        }
+
+        // Parse IP addresses
+        let ip = parse_ip(parts[0]);
+        let netmask = parse_ip(parts[1]);
+        let gateway = if !parts[2].is_empty() {
+            parse_ip(parts[2])
+        } else {
+            [0, 0, 0, 0]
+        };
+
+        if ip[0] == 0 && ip[1] == 0 && ip[2] == 0 && ip[3] == 0 {
+            vga::set_color(vga::Color::LightRed, vga::Color::Black);
+            vga::write_str("Error: Invalid IP address\n\n");
+            vga::set_color(vga::Color::White, vga::Color::Black);
+            return;
+        }
+
+        // Configure network
+        net::configure(ip, netmask, gateway);
+
+        vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+        vga::write_str("Network configured successfully\n");
+        vga::set_color(vga::Color::White, vga::Color::Black);
+        vga::write_str("IP:      ");
+        for i in 0..4 {
+            format_u8(ip[i]);
+            if i < 3 {
+                vga::write_str(".");
+            }
+        }
+        vga::write_str("\n");
+        vga::write_str("Netmask: ");
+        for i in 0..4 {
+            format_u8(netmask[i]);
+            if i < 3 {
+                vga::write_str(".");
+            }
+        }
+        vga::write_str("\n");
+        if gateway[0] != 0 || gateway[1] != 0 || gateway[2] != 0 || gateway[3] != 0 {
+            vga::write_str("Gateway: ");
+            for i in 0..4 {
+                format_u8(gateway[i]);
+                if i < 3 {
+                    vga::write_str(".");
+                }
+            }
+            vga::write_str("\n");
+        }
+    }
+
+    vga::write_str("\n");
+}
+
+/// Send ping (ICMP echo request)
+fn cmd_ping(args: &str) {
+    use crate::drivers::e1000;
+    use crate::net::icmp;
+
+    vga::write_str("\n");
+
+    if !e1000::is_initialized() {
+        vga::set_color(vga::Color::Yellow, vga::Color::Black);
+        vga::write_str("Network card not initialized. Use 'netinit' first.\n\n");
+        vga::set_color(vga::Color::White, vga::Color::Black);
+        return;
+    }
+
+    let config = net::get_config();
+    if !config.configured {
+        vga::set_color(vga::Color::Yellow, vga::Color::Black);
+        vga::write_str("Network not configured. Use 'ifconfig' first.\n\n");
+        vga::set_color(vga::Color::White, vga::Color::Black);
+        return;
+    }
+
+    if args.is_empty() {
+        vga::write_str("Usage: ping <ip_address>\n");
+        vga::write_str("Example: ping 10.0.2.2\n\n");
+        return;
+    }
+
+    let dest_ip = parse_ip(args);
+    if dest_ip[0] == 0 && dest_ip[1] == 0 && dest_ip[2] == 0 && dest_ip[3] == 0 {
+        vga::set_color(vga::Color::LightRed, vga::Color::Black);
+        vga::write_str("Error: Invalid IP address\n\n");
+        vga::set_color(vga::Color::White, vga::Color::Black);
+        return;
+    }
+
+    vga::write_str("PING ");
+    for i in 0..4 {
+        format_u8(dest_ip[i]);
+        if i < 3 {
+            vga::write_str(".");
+        }
+    }
+    vga::write_str(" 56 bytes of data\n");
+
+    // Send ping
+    icmp::send_echo_request(dest_ip, 1, 1);
+
+    vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+    vga::write_str("Ping request sent\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str("Note: Reply processing requires packet polling in main loop\n\n");
+}
+
+/// Display ARP cache
+fn cmd_arp() {
+    use crate::net::arp;
+
+    vga::write_str("\n");
+    vga::set_color(vga::Color::LightCyan, vga::Color::Black);
+    vga::write_str("ARP Cache\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str("=========\n\n");
+
+    let entries = arp::get_cache_entries();
+    let mut found = false;
+
+    vga::write_str("IP Address      MAC Address\n");
+    vga::write_str("----------      -----------\n");
+
+    for entry in entries.iter() {
+        if entry.is_valid() {
+            found = true;
+            let ip = entry.get_ip();
+            let mac = entry.get_mac();
+
+            // Display IP
+            for i in 0..4 {
+                format_u8(ip[i]);
+                if i < 3 {
+                    vga::write_str(".");
+                }
+            }
+
+            // Padding
+            vga::write_str("   ");
+
+            // Display MAC
+            for i in 0..6 {
+                crate::util::write_hex_u8(mac[i]);
+                if i < 5 {
+                    vga::write_str(":");
+                }
+            }
+
+            vga::write_str("\n");
+        }
+    }
+
+    if !found {
+        vga::set_color(vga::Color::Yellow, vga::Color::Black);
+        vga::write_str("ARP cache is empty\n");
+        vga::set_color(vga::Color::White, vga::Color::Black);
+    }
+
+    vga::write_str("\n");
+}
+
+/// Parse IP address from string (e.g., "192.168.1.1")
+fn parse_ip(s: &str) -> [u8; 4] {
+    let mut result = [0u8; 4];
+    let mut idx = 0;
+    let mut current = 0u8;
+
+    for ch in s.chars() {
+        if ch == '.' {
+            if idx < 4 {
+                result[idx] = current;
+                idx += 1;
+                current = 0;
+            }
+        } else if ch >= '0' && ch <= '9' {
+            let digit = (ch as u8) - b'0';
+            current = current.saturating_mul(10).saturating_add(digit);
+        }
+    }
+
+    if idx < 4 {
+        result[idx] = current;
+    }
+
+    result
+}
+
+/// Format u8 as decimal
+fn format_u8(value: u8) {
+    if value >= 100 {
+        let hundreds = value / 100;
+        let tens = (value % 100) / 10;
+        let ones = value % 10;
+        let buf = [(b'0' + hundreds), (b'0' + tens), (b'0' + ones)];
+        if let Ok(s) = core::str::from_utf8(&buf) {
+            vga::write_str(s);
+        }
+    } else if value >= 10 {
+        let tens = value / 10;
+        let ones = value % 10;
+        let buf = [(b'0' + tens), (b'0' + ones)];
+        if let Ok(s) = core::str::from_utf8(&buf) {
+            vga::write_str(s);
+        }
+    } else {
+        let buf = [(b'0' + value)];
+        if let Ok(s) = core::str::from_utf8(&buf) {
+            vga::write_str(s);
+        }
+    }
 }

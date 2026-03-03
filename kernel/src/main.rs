@@ -14,6 +14,7 @@ mod stats;
 mod boot_animation;
 mod editor;
 mod fs;
+mod net;
 
 /// Kernel entry point
 ///
@@ -101,6 +102,13 @@ pub extern "C" fn kernel_main() -> ! {
     drivers::serial::write_str("Initializing filesystem...\n");
     // Initialize simple filesystem
     fs::init();
+
+    drivers::serial::write_str("Initializing network stack...\n");
+    // Initialize network stack
+    net::init();
+
+    // Note: E1000 initialization is done via 'netinit' command
+    // since we need PCI enumeration or user-specified I/O base
 
     drivers::serial::write_str("Kernel initialized successfully\n");
 

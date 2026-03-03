@@ -35,6 +35,38 @@ pub fn write_hex_u64(value: u64) {
     }
 }
 
+/// Write a hexadecimal u16 to serial output
+pub fn write_hex_u16(value: u16) {
+    use crate::drivers::serial;
+
+    const HEX_CHARS: &[u8; 16] = b"0123456789ABCDEF";
+
+    for i in 0..4 {
+        let nibble = ((value >> (12 - i * 4)) & 0xF) as usize;
+        let ch = HEX_CHARS[nibble] as char;
+        let buf = [ch as u8];
+        if let Ok(s) = core::str::from_utf8(&buf) {
+            serial::write_str(s);
+        }
+    }
+}
+
+/// Write a hexadecimal u8 to serial output
+pub fn write_hex_u8(value: u8) {
+    use crate::drivers::serial;
+
+    const HEX_CHARS: &[u8; 16] = b"0123456789ABCDEF";
+
+    for i in 0..2 {
+        let nibble = ((value >> (4 - i * 4)) & 0xF) as usize;
+        let ch = HEX_CHARS[nibble] as char;
+        let buf = [ch as u8];
+        if let Ok(s) = core::str::from_utf8(&buf) {
+            serial::write_str(s);
+        }
+    }
+}
+
 /// Format a 32-bit number as hexadecimal string
 pub fn format_hex_u32(value: u32, buffer: &mut [u8; 10]) -> &str {
     const HEX_CHARS: &[u8; 16] = b"0123456789ABCDEF";
