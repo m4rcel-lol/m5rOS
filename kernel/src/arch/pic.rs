@@ -110,6 +110,7 @@ impl Pic {
     ///
     /// # Safety
     /// Modifies hardware state
+    #[allow(dead_code)]
     pub unsafe fn set_mask(&self, irq: u8) {
         let port = if irq < 8 {
             PIC1_DATA
@@ -137,6 +138,7 @@ impl Pic {
     }
 
     /// Get the interrupt vector for an IRQ number
+    #[allow(dead_code)]
     pub fn irq_vector(&self, irq: u8) -> u8 {
         if irq < 8 {
             self.offset1 + irq
@@ -186,6 +188,7 @@ pub unsafe fn enable_irq(irq: u8) {
 ///
 /// # Safety
 /// Modifies hardware state
+#[allow(dead_code)]
 pub unsafe fn disable_irq(irq: u8) {
     PIC.lock().set_mask(irq);
 }

@@ -102,6 +102,7 @@ impl CpuFeatures {
     }
 
     /// Check if PSE (Page Size Extension) is supported
+    #[allow(dead_code)]
     pub fn has_pse(&self) -> bool {
         self.bits & (1 << 3) != 0
     }
@@ -127,21 +128,25 @@ impl CpuFeatures {
     }
 
     /// Check if SYSENTER/SYSEXIT is supported
+    #[allow(dead_code)]
     pub fn has_sep(&self) -> bool {
         self.bits & (1 << 11) != 0
     }
 
     /// Check if PGE (Page Global Enable) is supported
+    #[allow(dead_code)]
     pub fn has_pge(&self) -> bool {
         self.bits & (1 << 13) != 0
     }
 
     /// Check if PAT (Page Attribute Table) is supported
+    #[allow(dead_code)]
     pub fn has_pat(&self) -> bool {
         self.bits & (1 << 16) != 0
     }
 
     /// Check if MMX is supported
+    #[allow(dead_code)]
     pub fn has_mmx(&self) -> bool {
         self.bits & (1 << 23) != 0
     }
@@ -195,6 +200,7 @@ impl ExtendedCpuFeatures {
     }
 
     /// Check if x2APIC is supported
+    #[allow(dead_code)]
     pub fn has_x2apic(&self) -> bool {
         self.bits & (1 << 21) != 0
     }

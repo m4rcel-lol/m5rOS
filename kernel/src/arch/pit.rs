@@ -52,17 +52,20 @@ pub fn tick() {
 }
 
 /// Get the current tick count
+#[allow(dead_code)]
 pub fn ticks() -> u64 {
     TICKS.load(Ordering::Relaxed)
 }
 
 /// Get elapsed time in milliseconds since boot
+#[allow(dead_code)]
 pub fn uptime_ms() -> u64 {
     // Each tick is 1000/TIMER_FREQUENCY milliseconds
     ticks() * (1000 / TIMER_FREQUENCY as u64)
 }
 
 /// Get elapsed time in seconds since boot
+#[allow(dead_code)]
 pub fn uptime_secs() -> u64 {
     uptime_ms() / 1000
 }
@@ -70,6 +73,7 @@ pub fn uptime_secs() -> u64 {
 /// Sleep for approximately the given number of milliseconds
 ///
 /// Note: This is a busy-wait sleep and not very accurate
+#[allow(dead_code)]
 pub fn sleep_ms(ms: u64) {
     let target = uptime_ms() + ms;
     while uptime_ms() < target {

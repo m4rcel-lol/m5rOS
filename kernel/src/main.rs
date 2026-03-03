@@ -6,6 +6,8 @@ use core::panic::PanicInfo;
 mod arch;
 mod drivers;
 mod mem;
+mod util;
+mod fmt;
 
 /// Kernel entry point
 ///
@@ -84,7 +86,7 @@ pub extern "C" fn kernel_main() -> ! {
         arch::pic::enable_irq(arch::pic::irq::KEYBOARD);
 
         // Enable interrupts globally
-        core::arch::asm!("sti");
+        arch::interrupts::enable();
     }
 
     // Note: Heap initialization requires proper paging setup first
@@ -101,30 +103,42 @@ pub extern "C" fn kernel_main() -> ! {
     drivers::vga::set_color(drivers::vga::Color::White, drivers::vga::Color::Black);
 
     // Halt the CPU
-    loop {
-        // SAFETY: HLT is safe to execute
-        unsafe {
-            core::arch::asm!("hlt");
-        }
-    }
+    arch::interrupts::halt_loop();
 }
 
 /// Kernel panic handler
 ///
-/// Outputs register state and stack trace via serial port
+/// Outputs panic information and halts
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
+    // Disable interrupts to prevent further issues
+    // SAFETY: We're in a panic state, need to stop everything
+    unsafe {
+        arch::interrupts::disable();
+    }
+
     drivers::serial::write_str("\n!!! KERNEL PANIC !!!\n");
+    drivers::vga::set_color(drivers::vga::Color::White, drivers::vga::Color::Red);
+    drivers::vga::write_str("\n!!! KERNEL PANIC !!!\n");
+
     if let Some(location) = info.location() {
         drivers::serial::write_str("Location: ");
         drivers::serial::write_str(location.file());
+        drivers::serial::write_str(":");
+        // Note: Can't format line number without alloc
         drivers::serial::write_str("\n");
+
+        drivers::vga::write_str("Location: ");
+        drivers::vga::write_str(location.file());
+        drivers::vga::write_str("\n");
     }
 
-    loop {
-        // SAFETY: HLT is safe to execute
-        unsafe {
-            core::arch::asm!("hlt");
-        }
-    }
+    // Note: info.message() returns a PanicMessage, which we can't easily format without alloc
+    drivers::serial::write_str("Message: [panic message]\n");
+    drivers::vga::write_str("Message: [panic message]\n");
+
+    drivers::serial::write_str("\nSystem halted\n");
+    drivers::vga::write_str("\nSystem halted\n");
+
+    arch::interrupts::halt_loop();
 }

@@ -267,24 +267,21 @@ extern "C" fn exception_handler_rust(exception_num: u64, _error_code: u64) {
     // For page faults, print CR2 (faulting address)
     if exception_num == 14 {
         // SAFETY: Reading CR2 is safe during a page fault handler
-        let _cr2: u64 = unsafe {
+        let cr2: u64 = unsafe {
             let cr2: u64;
             asm!("mov {}, cr2", out(reg) cr2);
             cr2
         };
-        serial::write_str("Faulting address: 0x");
-        // TODO: Add hex printing when we have format! support
+        serial::write_str("Faulting address: ");
+        let mut buf = [0u8; 18];
+        let hex_str = crate::util::format_hex_u64(cr2, &mut buf);
+        serial::write_str(hex_str);
         serial::write_str("\n");
     }
 
     // Hang the system
     serial::write_str("System halted\n");
-    loop {
-        // SAFETY: HLT is safe to execute
-        unsafe {
-            asm!("hlt");
-        }
-    }
+    crate::arch::interrupts::halt_loop();
 }
 
 // Hardware interrupt handlers
