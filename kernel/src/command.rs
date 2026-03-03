@@ -260,12 +260,26 @@ fn cmd_help() {
     vga::write_str("  install-m5ros - Install m5rOS to disk\n\n");
 
     vga::set_color(vga::Color::LightCyan, vga::Color::Black);
+    vga::write_str("Hardware:\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str("  lspci    - List all PCI devices\n");
+    vga::write_str("  gpuinfo  - Display integrated graphics info\n\n");
+
+    vga::set_color(vga::Color::LightCyan, vga::Color::Black);
     vga::write_str("Network:\n");
     vga::set_color(vga::Color::White, vga::Color::Black);
     vga::write_str("  netinit  - Initialize network card\n");
     vga::write_str("  ifconfig - Configure network interface\n");
     vga::write_str("  ping     - Send ICMP echo request\n");
-    vga::write_str("  arp      - Display ARP cache\n");
+    vga::write_str("  arp      - Display ARP cache\n\n");
+
+    vga::set_color(vga::Color::LightCyan, vga::Color::Black);
+    vga::write_str("Wireless:\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str("  wifiinfo - Display Wi-Fi adapter information\n");
+    vga::write_str("  wifiscan - Scan for Wi-Fi networks\n");
+    vga::write_str("  btinfo   - Display Bluetooth adapter info\n");
+    vga::write_str("  btscan   - Scan for Bluetooth devices\n");
     vga::write_str("\n");
 }
 
