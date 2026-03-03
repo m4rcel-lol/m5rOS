@@ -2,11 +2,21 @@
 
 A custom operating system built from first principles in Rust and C, inspired by early UNIX and Linux.
 
-## Current Status: Advanced Feature Phase (v0.3.0)
+## Current Status: Network Stack Phase (v0.4.0)
 
-m5rOS has progressed to include a professional boot animation, vi-like text editor, virtual filesystem, comprehensive file operations, and system installer framework.
+m5rOS has progressed to include a professional boot animation, vi-like text editor, virtual filesystem, **complete network stack with E1000 driver**, comprehensive file operations, network commands, and system installer framework.
 
 ### ✅ Implemented Components
+
+#### Network Stack & E1000 Driver
+- **Intel E1000 network driver** (82540EM Gigabit Ethernet)
+- **Ethernet layer** with frame parsing and building
+- **ARP protocol** with automatic address resolution and cache
+- **IPv4 protocol** with header validation and checksum
+- **ICMP protocol** for ping requests and replies
+- **UDP protocol** for datagram transmission
+- **Network commands**: netinit, ifconfig, ping, arp
+- **Manual network configuration** (IP, netmask, gateway)
 
 #### Boot Animation & Service Manager
 - **Professional boot animation** with m5rOS ASCII art logo
@@ -55,13 +65,15 @@ m5rOS has progressed to include a professional boot animation, vi-like text edit
 - **RTC driver** for reading real-time clock
 - **ATA PIO driver** for IDE hard disk access (identify, read, write sectors)
 - **Framebuffer graphics** with RGB/BGR pixel format support
+- **E1000 network driver** for Intel Gigabit Ethernet (82540EM)
 
-#### Interactive Command System (22 commands)
+#### Interactive Command System (26 commands)
 - **Command parser** with keyboard input buffering
 - **System info**: fetch, help, about, version, uptime
 - **Hardware**: cpuinfo, meminfo, stats, heap
 - **Time**: date, time (using RTC)
 - **File operations**: ls, cat, mkdir, touch, rm, edit
+- **Network**: netinit, ifconfig, ping, arp
 - **Utilities**: clear, echo
 - **Power**: reboot, shutdown
 - **Installation**: install-m5ros
