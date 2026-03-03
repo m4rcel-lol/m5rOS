@@ -1,0 +1,33 @@
+# Build artifacts
+target/
+*.o
+*.a
+*.so
+*.elf
+*.bin
+*.img
+*.iso
+
+# Rust
+Cargo.lock
+**/*.rs.bk
+
+# C
+*.out
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+/tmp/
