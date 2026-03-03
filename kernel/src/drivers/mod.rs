@@ -5,3 +5,4 @@ pub mod vga;
 pub mod keyboard;
 pub mod ata;
 pub mod framebuffer;
+pub mod rtc;

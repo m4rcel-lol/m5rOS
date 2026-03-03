@@ -4,7 +4,7 @@ A custom operating system built from first principles in Rust and C, inspired by
 
 ## Current Status: Enhanced Foundation Phase (v0.2.0)
 
-m5rOS is in early development. The core build system, kernel skeleton, and interactive command system have been established.
+m5rOS is in early development. The core build system, kernel skeleton, interactive command system, RTC support, and ATA disk driver have been established.
 
 ### ✅ Implemented Components
 
@@ -19,25 +19,35 @@ m5rOS is in early development. The core build system, kernel skeleton, and inter
 - **Kernel entry point** with comprehensive initialization
 - **Serial port driver** (16550 UART) for debugging output via COM1
 - **VGA text mode driver** (80x25, 16 colors) with optimized scrolling
-- **Panic handler** for kernel crashes with detailed output
-- **Port I/O operations** for hardware access (inb/outb/inw/outw/inl/outl)
+- **Enhanced panic handler** with CPU register dump for debugging
+- **Port I/O operations** for hardware access (inb/outb/inw/outw/inl/outl/insw)
 - **Physical frame allocator** using bitmap-based allocation (4 KiB frames)
 - **Kernel heap allocator** (linked-list) with 16MB heap space
 - **CPU feature detection** (CPUID) for vendor and capabilities
 - **GDT & IDT** with 21 exception handlers and hardware interrupt support
 - **PIC, PIT, PS/2 keyboard** drivers fully functional
+- **Complete page table mapper** with map/unmap/translate operations
+
+#### Device Drivers
+- **Serial driver** (COM1) for debugging
+- **VGA text mode** with color support
+- **PS/2 Keyboard** with full US QWERTY layout
+- **PIT** (Programmable Interval Timer) at 100 Hz
+- **RTC driver** for reading real-time clock
+- **ATA PIO driver** for IDE hard disk access (identify, read, write sectors)
+- **Framebuffer graphics** with RGB/BGR pixel format support
 
 #### Interactive Command System
 - **Command parser** with keyboard input buffering
-- **Built-in commands**: fetch, help, clear, uptime, meminfo, cpuinfo, version, about, echo, stats
+- **Built-in commands** (15 total):
+  - System info: `fetch`, `help`, `about`, `version`, `uptime`
+  - Hardware: `cpuinfo`, `meminfo`, `stats`, `heap`
+  - Time: `date`, `time` (using RTC)
+  - Utilities: `clear`, `echo`
+  - Power: `reboot`, `shutdown`
 - **fastfetch-like system information** display with ASCII art
 - **Statistics tracking** for IRQs and exceptions
 - **Color-coded output** for better readability
-
-#### Graphics Support
-- **Framebuffer driver** with RGB/BGR pixel format support
-- **8x8 bitmap font** for text rendering
-- **Drawing primitives** (pixel, line, rectangle, fill)
 
 ### 🚧 In Progress
 

@@ -273,7 +273,7 @@ extern "C" fn exception_handler_rust(exception_num: u64, _error_code: u64) {
             cr2
         };
         serial::write_str("Faulting address: ");
-        let mut buf = [0u8; 18];
+        let mut buf = [0u8; 16];
         let hex_str = crate::util::format_hex_u64(cr2, &mut buf);
         serial::write_str(hex_str);
         serial::write_str("\n");

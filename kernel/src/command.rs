@@ -5,6 +5,7 @@
 use crate::drivers::vga;
 use crate::sysinfo;
 use crate::stats;
+use crate::drivers::rtc;
 
 /// Maximum command buffer size
 const CMD_BUF_SIZE: usize = 256;
@@ -85,6 +86,11 @@ pub fn execute_command(cmd: &str) {
         "about" => cmd_about(),
         "echo" => cmd_echo(rest),
         "stats" => cmd_stats(),
+        "date" => cmd_date(),
+        "time" => cmd_time(),
+        "reboot" => cmd_reboot(),
+        "shutdown" => cmd_shutdown(),
+        "heap" => cmd_heap(),
         _ => {
             vga::write_str("Unknown command: ");
             vga::write_str(command);
@@ -200,6 +206,11 @@ fn cmd_help() {
     vga::write_str("  about    - Display OS information\n");
     vga::write_str("  echo     - Echo text to screen\n");
     vga::write_str("  stats    - Display kernel statistics\n");
+    vga::write_str("  date     - Display current date\n");
+    vga::write_str("  time     - Display current time\n");
+    vga::write_str("  heap     - Display heap statistics\n");
+    vga::write_str("  reboot   - Reboot the system\n");
+    vga::write_str("  shutdown - Shutdown the system\n");
     vga::write_str("\n");
 }
 
@@ -366,4 +377,98 @@ fn format_u64(n: u64) {
             vga::write_str(s);
         }
     }
+}
+
+/// Display current date
+fn cmd_date() {
+    // SAFETY: Reading RTC is safe
+    let dt = unsafe { rtc::read_rtc() };
+
+    vga::write_str("\n");
+
+    // Get day of week
+    let dow = rtc::day_of_week_name(dt.year, dt.month, dt.day);
+    vga::write_str(dow);
+    vga::write_str(", ");
+
+    // Get month name
+    let month = rtc::month_name(dt.month);
+    vga::write_str(month);
+    vga::write_str(" ");
+
+    // Day
+    format_u64(dt.day as u64);
+    vga::write_str(", ");
+
+    // Year
+    format_u64(dt.year as u64);
+    vga::write_str("\n\n");
+}
+
+/// Display current time
+fn cmd_time() {
+    // SAFETY: Reading RTC is safe
+    let dt = unsafe { rtc::read_rtc() };
+
+    vga::write_str("\nCurrent time: ");
+
+    let time_buf = dt.format_time();
+    if let Ok(time_str) = core::str::from_utf8(&time_buf) {
+        vga::write_str(time_str);
+    }
+
+    vga::write_str("\n\n");
+}
+
+/// Reboot the system
+fn cmd_reboot() {
+    vga::write_str("\n");
+    vga::set_color(vga::Color::Yellow, vga::Color::Black);
+    vga::write_str("Rebooting system...\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+
+    // SAFETY: Performing system reboot via keyboard controller
+    unsafe {
+        crate::arch::interrupts::disable();
+
+        // Use the keyboard controller to reset
+        loop {
+            let temp = crate::arch::port::inb(0x64);
+            if temp & 0x02 == 0 {
+                break;
+            }
+        }
+
+        crate::arch::port::outb(0x64, 0xFE);
+
+        // If that didn't work, halt
+        crate::arch::interrupts::halt_loop();
+    }
+}
+
+/// Shutdown the system (halt)
+fn cmd_shutdown() {
+    vga::write_str("\n");
+    vga::set_color(vga::Color::LightRed, vga::Color::Black);
+    vga::write_str("Shutting down...\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str("System halted. You can now turn off your computer.\n");
+
+    // SAFETY: Halting the system
+    unsafe {
+        crate::arch::interrupts::disable();
+        crate::arch::interrupts::halt_loop();
+    }
+}
+
+/// Display heap statistics
+fn cmd_heap() {
+    vga::write_str("\nHeap Statistics:\n");
+    vga::write_str("================\n\n");
+
+    vga::write_str("Status: ");
+    vga::set_color(vga::Color::Yellow, vga::Color::Black);
+    vga::write_str("Not yet initialized\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str("(Heap initialization pending bootloader completion)\n\n");
 }

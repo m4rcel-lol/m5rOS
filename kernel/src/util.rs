@@ -5,19 +5,34 @@
 /// Format a number as hexadecimal string
 ///
 /// Writes the hex representation to a buffer and returns the slice
-pub fn format_hex_u64(value: u64, buffer: &mut [u8; 18]) -> &str {
+pub fn format_hex_u64(value: u64, buffer: &mut [u8; 16]) -> &str {
     const HEX_CHARS: &[u8; 16] = b"0123456789ABCDEF";
-
-    buffer[0] = b'0';
-    buffer[1] = b'x';
 
     for i in 0..16 {
         let nibble = ((value >> (60 - i * 4)) & 0xF) as usize;
-        buffer[2 + i] = HEX_CHARS[nibble];
+        buffer[i] = HEX_CHARS[nibble];
     }
 
     // SAFETY: We just filled the buffer with valid ASCII
-    unsafe { core::str::from_utf8_unchecked(&buffer[..18]) }
+    unsafe { core::str::from_utf8_unchecked(&buffer[..16]) }
+}
+
+/// Write a hexadecimal u64 to serial output
+///
+/// Used by panic handler
+pub fn write_hex_u64(value: u64) {
+    use crate::drivers::serial;
+
+    const HEX_CHARS: &[u8; 16] = b"0123456789ABCDEF";
+
+    for i in 0..16 {
+        let nibble = ((value >> (60 - i * 4)) & 0xF) as usize;
+        let ch = HEX_CHARS[nibble] as char;
+        let buf = [ch as u8];
+        if let Ok(s) = core::str::from_utf8(&buf) {
+            serial::write_str(s);
+        }
+    }
 }
 
 /// Format a 32-bit number as hexadecimal string

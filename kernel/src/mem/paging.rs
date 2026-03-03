@@ -263,6 +263,185 @@ pub unsafe fn flush_tlb_all() {
     set_cr3(cr3);
 }
 
+/// Page table mapper for managing virtual memory mappings
+pub struct PageTableMapper {
+    pml4: &'static mut PageTable,
+}
+
+impl PageTableMapper {
+    /// Create a new page table mapper
+    ///
+    /// # Safety
+    /// The caller must ensure the PML4 pointer is valid and not aliased
+    pub unsafe fn new(pml4_addr: usize) -> Self {
+        PageTableMapper {
+            pml4: &mut *(pml4_addr as *mut PageTable),
+        }
+    }
+
+    /// Map a virtual page to a physical frame
+    ///
+    /// # Safety
+    /// The caller must ensure:
+    /// - The physical frame is valid and available
+    /// - The virtual address is not already mapped
+    pub unsafe fn map_page(
+        &mut self,
+        virt: VirtAddr,
+        phys: PhysAddr,
+        flags: PageTableFlags,
+        frame_allocator: &dyn Fn() -> Option<usize>,
+    ) -> Result<(), MapError> {
+        assert!(virt.is_aligned(), "Virtual address must be page-aligned");
+        assert!(phys.is_aligned(), "Physical address must be page-aligned");
+
+        let p4_index = virt.p4_index();
+        let p3_index = virt.p3_index();
+        let p2_index = virt.p2_index();
+        let p1_index = virt.p1_index();
+
+        // Get or create PDPT (Page Directory Pointer Table)
+        let p3 = self.get_or_create_table(p4_index, frame_allocator)?;
+
+        // Get or create PD (Page Directory)
+        let p2 = Self::get_or_create_next_table(p3, p3_index, frame_allocator)?;
+
+        // Get or create PT (Page Table)
+        let p1 = Self::get_or_create_next_table(p2, p2_index, frame_allocator)?;
+
+        // Map the page
+        if !p1[p1_index].is_unused() {
+            return Err(MapError::PageAlreadyMapped);
+        }
+
+        p1[p1_index].set_frame(phys.0 as usize, flags | PageTableFlags::PRESENT);
+        flush_tlb(virt);
+
+        Ok(())
+    }
+
+    /// Unmap a virtual page
+    ///
+    /// # Safety
+    /// The caller must ensure the page is safe to unmap
+    pub unsafe fn unmap_page(&mut self, virt: VirtAddr) -> Result<PhysAddr, MapError> {
+        assert!(virt.is_aligned(), "Virtual address must be page-aligned");
+
+        let p1 = self.walk_page_tables(virt)?;
+        let p1_index = virt.p1_index();
+
+        if p1[p1_index].is_unused() {
+            return Err(MapError::PageNotMapped);
+        }
+
+        let phys = PhysAddr::new(p1[p1_index].frame().unwrap() as u64);
+        p1[p1_index].set_unused();
+        flush_tlb(virt);
+
+        Ok(phys)
+    }
+
+    /// Translate a virtual address to a physical address
+    pub fn translate(&self, virt: VirtAddr) -> Option<PhysAddr> {
+        let p1 = self.walk_page_tables(virt).ok()?;
+        let p1_index = virt.p1_index();
+
+        if let Some(frame) = p1[p1_index].frame() {
+            Some(PhysAddr::new((frame as u64) + virt.page_offset()))
+        } else {
+            None
+        }
+    }
+
+    /// Walk the page tables to find the PT (Page Table)
+    fn walk_page_tables(&self, virt: VirtAddr) -> Result<&mut PageTable, MapError> {
+        let p4_index = virt.p4_index();
+        let p3_index = virt.p3_index();
+        let p2_index = virt.p2_index();
+
+        if self.pml4[p4_index].is_unused() {
+            return Err(MapError::PageNotMapped);
+        }
+
+        let p3 = unsafe {
+            &mut *(self.pml4[p4_index].frame().unwrap() as *mut PageTable)
+        };
+
+        if p3[p3_index].is_unused() {
+            return Err(MapError::PageNotMapped);
+        }
+
+        let p2 = unsafe {
+            &mut *(p3[p3_index].frame().unwrap() as *mut PageTable)
+        };
+
+        if p2[p2_index].is_unused() {
+            return Err(MapError::PageNotMapped);
+        }
+
+        let p1 = unsafe {
+            &mut *(p2[p2_index].frame().unwrap() as *mut PageTable)
+        };
+
+        Ok(p1)
+    }
+
+    /// Get or create a next level page table
+    fn get_or_create_next_table(
+        table: &mut PageTable,
+        index: usize,
+        frame_allocator: &dyn Fn() -> Option<usize>,
+    ) -> Result<&'static mut PageTable, MapError> {
+        if table[index].is_unused() {
+            let frame = frame_allocator().ok_or(MapError::OutOfMemory)?;
+            table[index].set_frame(
+                frame,
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+            );
+
+            // Zero out the new table
+            let new_table = unsafe { &mut *(frame as *mut PageTable) };
+            new_table.zero();
+            Ok(new_table)
+        } else {
+            Ok(unsafe { &mut *(table[index].frame().unwrap() as *mut PageTable) })
+        }
+    }
+
+    /// Get or create PDPT from PML4
+    fn get_or_create_table(
+        &mut self,
+        p4_index: usize,
+        frame_allocator: &dyn Fn() -> Option<usize>,
+    ) -> Result<&'static mut PageTable, MapError> {
+        if self.pml4[p4_index].is_unused() {
+            let frame = frame_allocator().ok_or(MapError::OutOfMemory)?;
+            self.pml4[p4_index].set_frame(
+                frame,
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+            );
+
+            // Zero out the new table
+            let new_table = unsafe { &mut *(frame as *mut PageTable) };
+            new_table.zero();
+            Ok(new_table)
+        } else {
+            Ok(unsafe { &mut *(self.pml4[p4_index].frame().unwrap() as *mut PageTable) })
+        }
+    }
+}
+
+/// Errors that can occur during page mapping
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MapError {
+    /// Page is already mapped
+    PageAlreadyMapped,
+    /// Page is not mapped
+    PageNotMapped,
+    /// Out of physical memory
+    OutOfMemory,
+}
+
 /// Identity map a region of physical memory
 ///
 /// Maps virtual addresses 1:1 to physical addresses
@@ -273,27 +452,25 @@ pub unsafe fn flush_tlb_all() {
 /// - The physical memory region is valid
 /// - The region does not overlap with existing mappings
 pub unsafe fn identity_map_region(
-    pml4: &mut PageTable,
+    mapper: &mut PageTableMapper,
     start: PhysAddr,
     size: usize,
     flags: PageTableFlags,
-) {
-    let start_page = start.align_down().0 as usize;
-    let end_page = start.align_up().0 as usize + size;
+    frame_allocator: &dyn Fn() -> Option<usize>,
+) -> Result<(), MapError> {
+    let start_page = start.align_down();
+    let end_addr = start.0 + size as u64;
+    let end_page = PhysAddr::new(end_addr).align_up();
 
-    for addr in (start_page..end_page).step_by(PAGE_SIZE) {
-        let virt = VirtAddr::new(addr as u64);
-        let phys = PhysAddr::new(addr as u64);
-
-        // This is a simplified version - full implementation would need
-        // to allocate intermediate page tables as needed
-        let p4_index = virt.p4_index();
-
-        if pml4[p4_index].is_unused() {
-            // Would need to allocate PDPT here
-            // For now, this is a stub
-        }
+    let mut addr = start_page.0;
+    while addr < end_page.0 {
+        let virt = VirtAddr::new(addr);
+        let phys = PhysAddr::new(addr);
+        mapper.map_page(virt, phys, flags, frame_allocator)?;
+        addr += PAGE_SIZE as u64;
     }
+
+    Ok(())
 }
 
 #[cfg(test)]

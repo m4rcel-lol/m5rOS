@@ -143,6 +143,69 @@ fn panic(info: &PanicInfo) -> ! {
     drivers::serial::write_str("Message: [panic message]\n");
     drivers::vga::write_str("Message: [panic message]\n");
 
+    // Dump CPU registers
+    drivers::serial::write_str("\nRegister dump:\n");
+    drivers::vga::write_str("\nRegister dump:\n");
+
+    // SAFETY: Reading registers for debugging during panic
+    unsafe {
+        let mut rsp: u64;
+        let mut rbp: u64;
+        let mut cr2: u64;
+        let mut cr3: u64;
+        let mut rflags: u64;
+
+        core::arch::asm!(
+            "mov {}, rsp",
+            "mov {}, rbp",
+            "mov {}, cr2",
+            "mov {}, cr3",
+            "pushfq",
+            "pop {}",
+            out(reg) rsp,
+            out(reg) rbp,
+            out(reg) cr2,
+            out(reg) cr3,
+            out(reg) rflags,
+        );
+
+        drivers::serial::write_str("  RSP: 0x");
+        util::write_hex_u64(rsp);
+        drivers::serial::write_str("\n");
+
+        drivers::serial::write_str("  RBP: 0x");
+        util::write_hex_u64(rbp);
+        drivers::serial::write_str("\n");
+
+        drivers::serial::write_str("  CR2: 0x");
+        util::write_hex_u64(cr2);
+        drivers::serial::write_str(" (page fault addr)\n");
+
+        drivers::serial::write_str("  CR3: 0x");
+        util::write_hex_u64(cr3);
+        drivers::serial::write_str(" (page table)\n");
+
+        drivers::serial::write_str("  RFLAGS: 0x");
+        util::write_hex_u64(rflags);
+        drivers::serial::write_str("\n");
+
+        drivers::vga::write_str("  RSP: 0x");
+        let mut buf = [0u8; 16];
+        let hex_str = util::format_hex_u64(rsp, &mut buf);
+        drivers::vga::write_str(hex_str);
+        drivers::vga::write_str("\n");
+
+        drivers::vga::write_str("  CR2: 0x");
+        let hex_str = util::format_hex_u64(cr2, &mut buf);
+        drivers::vga::write_str(hex_str);
+        drivers::vga::write_str("\n");
+
+        drivers::vga::write_str("  CR3: 0x");
+        let hex_str = util::format_hex_u64(cr3, &mut buf);
+        drivers::vga::write_str(hex_str);
+        drivers::vga::write_str("\n");
+    }
+
     drivers::serial::write_str("\nSystem halted\n");
     drivers::vga::write_str("\nSystem halted\n");
 

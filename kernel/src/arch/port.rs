@@ -71,3 +71,16 @@ pub unsafe fn outl(port: u16, value: u32) {
     // SAFETY: Caller guarantees port is valid
     asm!("out dx, eax", in("dx") port, in("eax") value, options(nomem, nostack));
 }
+
+/// Read a word from an I/O port using the INS instruction
+///
+/// # Safety
+/// This function is unsafe because it performs raw I/O operations
+/// Caller must ensure the port is valid and reading from it is safe
+#[inline]
+pub unsafe fn insw(port: u16) -> u16 {
+    let value: u16;
+    // SAFETY: Caller guarantees port is valid
+    asm!("in ax, dx", out("ax") value, in("dx") port, options(nomem, nostack));
+    value
+}
