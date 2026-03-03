@@ -135,6 +135,118 @@ pub fn stats() -> (usize, usize, usize) {
     (total, allocated, free)
 }
 
+/// Allocate multiple contiguous physical frames
+///
+/// Returns None if the requested number of contiguous frames are not available
+pub fn allocate_frames(count: usize) -> Option<Frame> {
+    if count == 0 {
+        return None;
+    }
+
+    let mut bitmap = FRAME_BITMAP.lock();
+    let total = TOTAL_FRAMES.load(Ordering::Relaxed);
+
+    // Search for contiguous free frames
+    'outer: for start_frame in 0..(total.saturating_sub(count - 1)) {
+        // Check if 'count' frames starting at start_frame are all free
+        for offset in 0..count {
+            let frame_num = start_frame + offset;
+            let word_index = frame_num / 64;
+            let bit_index = frame_num % 64;
+
+            if word_index >= bitmap.len() {
+                break 'outer;
+            }
+
+            let mask = 1u64 << bit_index;
+            if bitmap[word_index] & mask != 0 {
+                // Frame is allocated, skip to next potential start
+                continue 'outer;
+            }
+        }
+
+        // Found contiguous frames, allocate them all
+        for offset in 0..count {
+            let frame_num = start_frame + offset;
+            let word_index = frame_num / 64;
+            let bit_index = frame_num % 64;
+            let mask = 1u64 << bit_index;
+            bitmap[word_index] |= mask;
+        }
+
+        ALLOCATED_FRAMES.fetch_add(count, Ordering::Relaxed);
+        NEXT_FREE_FRAME.store((start_frame + count) % total, Ordering::Relaxed);
+
+        return Some(Frame { number: start_frame });
+    }
+
+    None
+}
+
+/// Deallocate multiple contiguous physical frames
+///
+/// # Safety
+/// The frames must have been previously allocated and not already freed
+/// The frames must not be in use
+pub unsafe fn deallocate_frames(frame: Frame, count: usize) {
+    let mut bitmap = FRAME_BITMAP.lock();
+
+    for offset in 0..count {
+        let frame_num = frame.number + offset;
+        let word_index = frame_num / 64;
+        let bit_index = frame_num % 64;
+
+        if word_index >= bitmap.len() {
+            break;
+        }
+
+        let mask = 1u64 << bit_index;
+        if bitmap[word_index] & mask != 0 {
+            bitmap[word_index] &= !mask;
+        }
+    }
+
+    ALLOCATED_FRAMES.fetch_sub(count, Ordering::Relaxed);
+
+    // Update hint if this frame comes before current hint
+    let current_hint = NEXT_FREE_FRAME.load(Ordering::Relaxed);
+    if frame.number < current_hint {
+        NEXT_FREE_FRAME.store(frame.number, Ordering::Relaxed);
+    }
+}
+
+/// Mark a specific frame as used (for reserving kernel/bootloader regions)
+///
+/// # Safety
+/// Should only be called during initialization to mark reserved memory
+pub unsafe fn mark_frame_used(frame: Frame) {
+    let mut bitmap = FRAME_BITMAP.lock();
+    let word_index = frame.number / 64;
+    let bit_index = frame.number % 64;
+
+    if word_index < bitmap.len() {
+        let mask = 1u64 << bit_index;
+        if bitmap[word_index] & mask == 0 {
+            bitmap[word_index] |= mask;
+            ALLOCATED_FRAMES.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+}
+
+/// Check if a frame is allocated
+pub fn is_frame_allocated(frame: Frame) -> bool {
+    let bitmap = FRAME_BITMAP.lock();
+    let word_index = frame.number / 64;
+    let bit_index = frame.number % 64;
+
+    if word_index >= bitmap.len() {
+        return false;
+    }
+
+    let mask = 1u64 << bit_index;
+    bitmap[word_index] & mask != 0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

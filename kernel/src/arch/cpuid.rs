@@ -237,3 +237,18 @@ pub fn print_cpu_info() {
     if ext_features.has_avx() { serial::write_str("AVX "); }
     serial::write_str("\n");
 }
+
+/// Get CPU vendor as a string
+pub fn get_vendor_string() -> &'static str {
+    match get_vendor() {
+        CpuVendor::Intel => "Intel",
+        CpuVendor::AMD => "AMD",
+        CpuVendor::Unknown => "Unknown",
+    }
+}
+
+/// Get feature info for use by other modules
+pub fn get_feature_info() -> CpuidResult {
+    cpuid(1, 0)
+}
+

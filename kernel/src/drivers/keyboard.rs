@@ -4,6 +4,7 @@
 // to key events. Supports US QWERTY layout.
 
 use crate::drivers::vga;
+use crate::command::CommandBuffer;
 use spin::Mutex;
 
 /// Keyboard data port
@@ -58,6 +59,7 @@ struct KeyboardState {
     ctrl_pressed: bool,
     alt_pressed: bool,
     caps_lock: bool,
+    cmd_buffer: CommandBuffer,
 }
 
 impl KeyboardState {
@@ -67,6 +69,7 @@ impl KeyboardState {
             ctrl_pressed: false,
             alt_pressed: false,
             caps_lock: false,
+            cmd_buffer: CommandBuffer::new(),
         }
     }
 }
@@ -148,17 +151,63 @@ pub fn handle_scancode(scancode: u8) {
     if state.ctrl_pressed {
         match ascii {
             b'c' | b'C' => {
-                // Ctrl+C - could be used for interrupting processes later
-                vga::write_str("^C");
+                // Ctrl+C - clear command buffer and show new prompt
+                vga::write_str("^C\n> ");
+                state.cmd_buffer.clear();
                 return;
             }
             b'l' | b'L' => {
-                // Ctrl+L - clear screen
+                // Ctrl+L - clear screen and show prompt
                 vga::clear_screen();
+                vga::write_str("> ");
+                state.cmd_buffer.clear();
                 return;
             }
             _ => {}
         }
+    }
+
+    // Handle backspace
+    if ascii == b'\x08' {
+        if state.cmd_buffer.pop().is_some() {
+            vga::backspace();
+        }
+        return;
+    }
+
+    // Handle Enter - execute command
+    if ascii == b'\n' {
+        vga::write_str("\n");
+        let cmd = state.cmd_buffer.as_str();
+
+        // Need to drop the lock before executing command
+        let cmd_copy = if cmd.len() > 0 {
+            let mut buf = [0u8; 256];
+            let len = cmd.len().min(256);
+            buf[..len].copy_from_slice(&cmd.as_bytes()[..len]);
+            Some((buf, len))
+        } else {
+            None
+        };
+
+        state.cmd_buffer.clear();
+        drop(state);
+
+        // Execute the command
+        if let Some((buf, len)) = cmd_copy {
+            // SAFETY: cmd is valid UTF-8 (we only pushed ASCII)
+            let cmd_str = unsafe { core::str::from_utf8_unchecked(&buf[..len]) };
+            crate::command::execute_command(cmd_str);
+        }
+
+        // Show prompt
+        vga::write_str("> ");
+        return;
+    }
+
+    // Add printable character to command buffer
+    if ascii.is_ascii_graphic() || ascii == b' ' {
+        state.cmd_buffer.push(ascii);
     }
 
     // Echo the character to VGA

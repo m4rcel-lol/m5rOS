@@ -155,6 +155,19 @@ impl Writer {
     pub fn set_color(&mut self, foreground: Color, background: Color) {
         self.color_code = ColorCode::new(foreground, background);
     }
+
+    /// Handle backspace - move cursor back and delete character
+    pub fn backspace(&mut self) {
+        if self.column_position > 0 {
+            self.column_position -= 1;
+            let row = BUFFER_HEIGHT - 1;
+            let col = self.column_position;
+            self.buffer.chars[row][col] = ScreenChar {
+                ascii_character: b' ',
+                color_code: self.color_code,
+            };
+        }
+    }
 }
 
 // Implement fmt::Write to allow using write! and writeln! macros
@@ -197,6 +210,14 @@ pub fn set_color(foreground: Color, background: Color) {
         writer.set_color(foreground, background);
     }
 }
+
+/// Handle backspace
+pub fn backspace() {
+    if let Some(ref mut writer) = *WRITER.lock() {
+        writer.backspace();
+    }
+}
+
 
 /// Macro for printing to VGA
 #[macro_export]

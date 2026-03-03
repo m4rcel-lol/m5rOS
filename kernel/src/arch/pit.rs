@@ -70,6 +70,12 @@ pub fn uptime_secs() -> u64 {
     uptime_ms() / 1000
 }
 
+/// Alias for uptime_secs
+pub fn uptime_seconds() -> u64 {
+    uptime_secs()
+}
+
+
 /// Sleep for approximately the given number of milliseconds
 ///
 /// Note: This is a busy-wait sleep and not very accurate

@@ -8,6 +8,8 @@ mod drivers;
 mod mem;
 mod util;
 mod fmt;
+mod sysinfo;
+mod command;
 
 /// Kernel entry point
 ///
@@ -99,8 +101,11 @@ pub extern "C" fn kernel_main() -> ! {
     drivers::vga::write_str("All systems operational.\n");
     drivers::vga::set_color(drivers::vga::Color::LightCyan, drivers::vga::Color::Black);
     drivers::vga::write_str("Timer and keyboard interrupts enabled.\n");
-    drivers::vga::write_str("Type to test keyboard input!\n\n");
+    drivers::vga::write_str("Type 'help' for available commands or 'fetch' for system info!\n\n");
     drivers::vga::set_color(drivers::vga::Color::White, drivers::vga::Color::Black);
+
+    // Show command prompt
+    drivers::vga::write_str("> ");
 
     // Halt the CPU
     arch::interrupts::halt_loop();
