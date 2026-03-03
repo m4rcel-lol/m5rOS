@@ -46,6 +46,44 @@ pub extern "C" fn kernel_main() -> ! {
         arch::idt::init();
     }
 
+    drivers::serial::write_str("Initializing PIC...\n");
+    drivers::vga::write_str("Initializing PIC...\n");
+    // Initialize PIC (Programmable Interrupt Controller)
+    // SAFETY: This is called once during kernel initialization
+    unsafe {
+        arch::pic::init();
+    }
+
+    drivers::serial::write_str("Initializing PIT...\n");
+    drivers::vga::write_str("Initializing PIT...\n");
+    // Initialize PIT (Programmable Interval Timer)
+    // SAFETY: This is called once during kernel initialization
+    unsafe {
+        arch::pit::init();
+    }
+
+    drivers::serial::write_str("Initializing keyboard...\n");
+    drivers::vga::write_str("Initializing keyboard...\n");
+    // Initialize keyboard driver
+    // SAFETY: This is called once during kernel initialization
+    unsafe {
+        drivers::keyboard::init();
+    }
+
+    // Enable interrupts now that all handlers are set up
+    drivers::serial::write_str("Enabling interrupts...\n");
+    drivers::vga::write_str("Enabling interrupts...\n");
+
+    // Enable timer and keyboard IRQs
+    // SAFETY: Interrupt handlers are set up
+    unsafe {
+        arch::pic::enable_irq(arch::pic::irq::TIMER);
+        arch::pic::enable_irq(arch::pic::irq::KEYBOARD);
+
+        // Enable interrupts globally
+        core::arch::asm!("sti");
+    }
+
     // Note: Heap initialization requires proper paging setup first
     // This will be enabled once we have a working bootloader and paging
 
@@ -54,6 +92,9 @@ pub extern "C" fn kernel_main() -> ! {
 
     drivers::vga::set_color(drivers::vga::Color::LightGreen, drivers::vga::Color::Black);
     drivers::vga::write_str("All systems operational.\n");
+    drivers::vga::set_color(drivers::vga::Color::LightCyan, drivers::vga::Color::Black);
+    drivers::vga::write_str("Timer and keyboard interrupts enabled.\n");
+    drivers::vga::write_str("Type to test keyboard input!\n\n");
     drivers::vga::set_color(drivers::vga::Color::White, drivers::vga::Color::Black);
 
     // Halt the CPU

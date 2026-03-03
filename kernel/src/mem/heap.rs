@@ -1,12 +1,12 @@
 // Kernel heap allocator
 //
-// Implements a simple bump allocator for the kernel heap.
-// This is a basic allocator that just increments a pointer for each allocation.
-// While not efficient for general use, it's simple and works for early kernel development.
-// A more sophisticated allocator (buddy or slab) should replace this in the future.
+// Implements a linked-list allocator for the kernel heap.
+// This allocator maintains a linked list of free memory blocks and can properly
+// deallocate memory, making it much more efficient than a bump allocator.
 
 use core::alloc::{GlobalAlloc, Layout};
-use core::ptr::null_mut;
+use core::mem;
+use core::ptr::{self, null_mut};
 use spin::Mutex;
 
 /// Kernel heap start address (in higher half)
@@ -15,75 +15,147 @@ const HEAP_START: usize = 0xFFFFFFFF_C0000000;
 /// Kernel heap size (16 MB)
 const HEAP_SIZE: usize = 16 * 1024 * 1024;
 
-/// Simple bump allocator
-struct BumpAllocator {
-    heap_start: usize,
-    heap_end: usize,
-    next: usize,
-    allocations: usize,
+/// Minimum allocation size (includes header)
+const MIN_ALLOC_SIZE: usize = mem::size_of::<Node>();
+
+/// Free list node
+struct Node {
+    size: usize,
+    next: Option<&'static mut Node>,
 }
 
-impl BumpAllocator {
-    /// Create a new bump allocator
-    const fn new() -> Self {
-        BumpAllocator {
-            heap_start: HEAP_START,
-            heap_end: HEAP_START + HEAP_SIZE,
-            next: HEAP_START,
-            allocations: 0,
+impl Node {
+    const fn new(size: usize) -> Self {
+        Node { size, next: None }
+    }
+}
+
+/// Linked-list allocator
+pub struct LinkedListAllocator {
+    head: Option<&'static mut Node>,
+}
+
+impl LinkedListAllocator {
+    /// Create a new linked-list allocator
+    pub const fn new() -> Self {
+        LinkedListAllocator { head: None }
+    }
+
+    /// Initialize the allocator with a heap region
+    ///
+    /// # Safety
+    /// The heap region must be properly initialized and mapped
+    /// This must only be called once
+    pub unsafe fn init(&mut self, heap_start: usize, heap_size: usize) {
+        self.add_free_region(heap_start, heap_size);
+    }
+
+    /// Add a free region to the free list
+    ///
+    /// # Safety
+    /// The region must be valid and unused
+    unsafe fn add_free_region(&mut self, addr: usize, size: usize) {
+        // Ensure region is large enough to hold a Node
+        assert!(size >= mem::size_of::<Node>());
+        assert!(addr % mem::align_of::<Node>() == 0);
+
+        // Create new node
+        let mut node = Node::new(size);
+        node.next = self.head.take();
+
+        // Write node to memory
+        let node_ptr = addr as *mut Node;
+        node_ptr.write(node);
+        self.head = Some(&mut *node_ptr);
+    }
+
+    /// Find a suitable region and remove it from the list
+    ///
+    /// Returns (region address, region size, allocation size)
+    fn find_region(&mut self, size: usize, align: usize) -> Option<(usize, usize, usize)> {
+        let mut current: *mut Option<&'static mut Node> = &mut self.head;
+
+        // SAFETY: We control access to the list through &mut self
+        unsafe {
+            while let Some(node) = (*current).as_mut() {
+                // Calculate aligned start address
+                let node_addr = node as *const _ as *const u8 as usize;
+                let alloc_start = align_up(node_addr, align);
+                let alloc_end = alloc_start.checked_add(size)?;
+
+                let region_start = node_addr;
+                let region_end = region_start + node.size;
+
+                if alloc_end <= region_end {
+                    // Found suitable region - extract data before modifying list
+                    let region_size = node.size;
+
+                    // Remove node from list
+                    let next = node.next.take();
+                    *current = next;
+
+                    return Some((region_start, region_size, size));
+                }
+
+                // Move to next node
+                current = &mut node.next as *mut Option<&'static mut Node>;
+            }
         }
+
+        None
     }
 
     /// Allocate memory
     ///
     /// # Safety
     /// The heap region must be properly initialized and mapped
-    unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {
-        let alloc_start = align_up(self.next, layout.align());
-        let alloc_end = match alloc_start.checked_add(layout.size()) {
-            Some(end) => end,
-            None => return null_mut(),
-        };
+    pub unsafe fn alloc(&mut self, layout: Layout) -> *mut u8 {
+        // Ensure minimum size
+        let size = layout.size().max(MIN_ALLOC_SIZE);
+        let align = layout.align();
 
-        if alloc_end > self.heap_end {
-            // Out of memory
-            return null_mut();
+        if let Some((region_start, region_size, alloc_size)) = self.find_region(size, align) {
+            let alloc_start = align_up(region_start, align);
+            let alloc_end = alloc_start + alloc_size;
+
+            // Add excess at beginning back to free list
+            let excess_start = region_start;
+            let excess_end = alloc_start;
+            if excess_end > excess_start {
+                let excess_size = excess_end - excess_start;
+                if excess_size >= MIN_ALLOC_SIZE {
+                    self.add_free_region(excess_start, excess_size);
+                }
+            }
+
+            // Add excess at end back to free list
+            let excess_start = alloc_end;
+            let excess_end = region_start + region_size;
+            if excess_end > excess_start {
+                let excess_size = excess_end - excess_start;
+                if excess_size >= MIN_ALLOC_SIZE {
+                    self.add_free_region(excess_start, excess_size);
+                }
+            }
+
+            alloc_start as *mut u8
+        } else {
+            null_mut()
         }
-
-        self.next = alloc_end;
-        self.allocations += 1;
-
-        alloc_start as *mut u8
     }
 
-    /// Deallocate memory (no-op for bump allocator)
+    /// Deallocate memory
     ///
-    /// Note: Bump allocators don't actually free memory until reset
-    /// This is a limitation that should be addressed with a better allocator
-    unsafe fn dealloc(&mut self, _ptr: *mut u8, _layout: Layout) {
-        // Bump allocator doesn't support deallocation
-        // In a real implementation, we'd use a more sophisticated allocator
-        self.allocations -= 1;
-    }
-
-    /// Get allocation statistics
-    pub fn used(&self) -> usize {
-        self.next - self.heap_start
-    }
-
-    /// Get free space
-    pub fn free(&self) -> usize {
-        self.heap_end - self.next
-    }
-
-    /// Get total allocations count
-    pub fn allocations(&self) -> usize {
-        self.allocations
+    /// # Safety
+    /// The pointer must have been allocated by this allocator
+    pub unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
+        let size = layout.size().max(MIN_ALLOC_SIZE);
+        self.add_free_region(ptr as usize, size);
     }
 }
 
 /// Global allocator instance
-static ALLOCATOR: Mutex<BumpAllocator> = Mutex::new(BumpAllocator::new());
+static ALLOCATOR: Mutex<LinkedListAllocator> = Mutex::new(LinkedListAllocator::new());
 
 /// Global allocator for Rust's alloc crate
 struct KernelAllocator;
@@ -119,15 +191,22 @@ pub unsafe fn init() {
     //
     // For now, we assume the bootloader has set up identity mapping
     // and the heap region is accessible (this is a simplification)
+    ALLOCATOR.lock().init(HEAP_START, HEAP_SIZE);
 }
 
 /// Get heap statistics
-pub fn stats() -> (usize, usize, usize) {
+pub fn stats() -> (usize, usize) {
     let allocator = ALLOCATOR.lock();
-    let used = allocator.used();
-    let free = allocator.free();
-    let allocations = allocator.allocations();
-    (used, free, allocations)
+    let mut free = 0;
+    let mut current = &allocator.head;
+
+    while let Some(ref node) = current {
+        free += node.size;
+        current = &node.next;
+    }
+
+    let used = HEAP_SIZE - free;
+    (used, free)
 }
 
 #[cfg(test)]

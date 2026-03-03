@@ -287,6 +287,137 @@ extern "C" fn exception_handler_rust(exception_num: u64, _error_code: u64) {
     }
 }
 
+// Hardware interrupt handlers
+// These are called by hardware devices (timer, keyboard, etc.)
+
+/// Timer interrupt handler (IRQ0)
+// SAFETY: naked function required to avoid Rust prologue/epilogue
+#[unsafe(naked)]
+unsafe extern "C" fn timer_interrupt_handler() {
+    naked_asm!(
+        // Save all registers
+        "push rax",
+        "push rbx",
+        "push rcx",
+        "push rdx",
+        "push rsi",
+        "push rdi",
+        "push rbp",
+        "push r8",
+        "push r9",
+        "push r10",
+        "push r11",
+        "push r12",
+        "push r13",
+        "push r14",
+        "push r15",
+
+        // Call the Rust timer handler
+        "call timer_handler_rust",
+
+        // Restore registers
+        "pop r15",
+        "pop r14",
+        "pop r13",
+        "pop r12",
+        "pop r11",
+        "pop r10",
+        "pop r9",
+        "pop r8",
+        "pop rbp",
+        "pop rdi",
+        "pop rsi",
+        "pop rdx",
+        "pop rcx",
+        "pop rbx",
+        "pop rax",
+
+        // Return from interrupt
+        "iretq",
+    );
+}
+
+/// Keyboard interrupt handler (IRQ1)
+// SAFETY: naked function required to avoid Rust prologue/epilogue
+#[unsafe(naked)]
+unsafe extern "C" fn keyboard_interrupt_handler() {
+    naked_asm!(
+        // Save all registers
+        "push rax",
+        "push rbx",
+        "push rcx",
+        "push rdx",
+        "push rsi",
+        "push rdi",
+        "push rbp",
+        "push r8",
+        "push r9",
+        "push r10",
+        "push r11",
+        "push r12",
+        "push r13",
+        "push r14",
+        "push r15",
+
+        // Call the Rust keyboard handler
+        "call keyboard_handler_rust",
+
+        // Restore registers
+        "pop r15",
+        "pop r14",
+        "pop r13",
+        "pop r12",
+        "pop r11",
+        "pop r10",
+        "pop r9",
+        "pop r8",
+        "pop rbp",
+        "pop rdi",
+        "pop rsi",
+        "pop rdx",
+        "pop rcx",
+        "pop rbx",
+        "pop rax",
+
+        // Return from interrupt
+        "iretq",
+    );
+}
+
+/// Rust timer interrupt handler
+#[no_mangle]
+extern "C" fn timer_handler_rust() {
+    use crate::arch::{pic, pit};
+
+    // Increment tick counter
+    pit::tick();
+
+    // Send EOI to PIC
+    // SAFETY: Called once at end of interrupt handler
+    unsafe {
+        pic::send_eoi(pic::irq::TIMER);
+    }
+}
+
+/// Rust keyboard interrupt handler
+#[no_mangle]
+extern "C" fn keyboard_handler_rust() {
+    use crate::arch::{pic, port};
+
+    // Read scancode from keyboard
+    // SAFETY: Reading from keyboard port is safe
+    let scancode = unsafe { port::inb(0x60) };
+
+    // Handle the scancode (will be implemented in keyboard driver)
+    crate::drivers::keyboard::handle_scancode(scancode);
+
+    // Send EOI to PIC
+    // SAFETY: Called once at end of interrupt handler
+    unsafe {
+        pic::send_eoi(pic::irq::KEYBOARD);
+    }
+}
+
 /// Initialize the IDT
 ///
 /// # Safety
@@ -313,6 +444,10 @@ pub unsafe fn init() {
     IDT.set_handler(18, machine_check_handler);
     IDT.set_handler(19, simd_exception_handler);
     IDT.set_handler(20, virtualization_handler);
+
+    // Set up hardware interrupt handlers (IRQs remapped to 32-47)
+    IDT.set_handler(32, timer_interrupt_handler);  // IRQ0: Timer
+    IDT.set_handler(33, keyboard_interrupt_handler);  // IRQ1: Keyboard
 
     // Load the IDT
     IDT.load();
