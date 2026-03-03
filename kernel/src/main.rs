@@ -10,6 +10,7 @@ mod util;
 mod fmt;
 mod sysinfo;
 mod command;
+mod stats;
 
 /// Kernel entry point
 ///
@@ -23,7 +24,7 @@ pub extern "C" fn kernel_main() -> ! {
     }
 
     // Print boot message
-    drivers::serial::write_str("m5rOS v0.1.0 - Booting...\n");
+    drivers::serial::write_str("m5rOS v0.2.0 - Booting...\n");
 
     // Print CPU information
     arch::cpuid::print_cpu_info();
@@ -34,7 +35,7 @@ pub extern "C" fn kernel_main() -> ! {
         drivers::vga::init();
     }
     drivers::vga::clear_screen();
-    drivers::vga::write_str("m5rOS v0.1.0\n");
+    drivers::vga::write_str("m5rOS v0.2.0\n");
     drivers::vga::write_str("=============\n\n");
 
     drivers::serial::write_str("Initializing GDT...\n");

@@ -4,6 +4,7 @@
 
 use crate::drivers::vga;
 use crate::sysinfo;
+use crate::stats;
 
 /// Maximum command buffer size
 const CMD_BUF_SIZE: usize = 256;
@@ -70,6 +71,9 @@ pub fn execute_command(cmd: &str) {
     let mut words = trimmed.split_whitespace();
     let command = words.next().unwrap_or("");
 
+    // Get the rest as a single string for echo command
+    let rest = trimmed.strip_prefix(command).unwrap_or("").trim();
+
     match command {
         "fetch" => cmd_fetch(),
         "help" => cmd_help(),
@@ -77,6 +81,10 @@ pub fn execute_command(cmd: &str) {
         "uptime" => cmd_uptime(),
         "meminfo" => cmd_meminfo(),
         "cpuinfo" => cmd_cpuinfo(),
+        "version" | "ver" => cmd_version(),
+        "about" => cmd_about(),
+        "echo" => cmd_echo(rest),
+        "stats" => cmd_stats(),
         _ => {
             vga::write_str("Unknown command: ");
             vga::write_str(command);
@@ -188,6 +196,10 @@ fn cmd_help() {
     vga::write_str("  uptime   - Display system uptime\n");
     vga::write_str("  meminfo  - Display memory information\n");
     vga::write_str("  cpuinfo  - Display CPU information\n");
+    vga::write_str("  version  - Display OS version\n");
+    vga::write_str("  about    - Display OS information\n");
+    vga::write_str("  echo     - Echo text to screen\n");
+    vga::write_str("  stats    - Display kernel statistics\n");
     vga::write_str("\n");
 }
 
@@ -245,4 +257,113 @@ fn cmd_cpuinfo() {
     let features_str = info.cpu_features.as_string(&mut features_buf);
     vga::write_str(features_str);
     vga::write_str("\n\n");
+}
+
+/// Display version information
+fn cmd_version() {
+    let info = sysinfo::get_system_info();
+    vga::write_str("\n");
+    vga::set_color(vga::Color::LightCyan, vga::Color::Black);
+    vga::write_str(info.os_name);
+    vga::write_str(" ");
+    vga::write_str(info.os_version);
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str(" (");
+    vga::write_str(info.kernel_version);
+    vga::write_str(")\n");
+    vga::write_str("A custom operating system built from first principles\n\n");
+}
+
+/// Display about information
+fn cmd_about() {
+    vga::write_str("\n");
+    vga::set_color(vga::Color::LightCyan, vga::Color::Black);
+    vga::write_str("m5rOS - Custom Operating System\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str("================================\n\n");
+
+    vga::write_str("Version:      0.2.0-dev\n");
+    vga::write_str("Architecture: x86_64\n");
+    vga::write_str("Kernel Type:  Hybrid Monolithic\n");
+    vga::write_str("Boot Method:  UEFI\n");
+    vga::write_str("Language:     Rust (kernel) + C (userspace)\n\n");
+
+    vga::write_str("Features:\n");
+    vga::write_str("  - Hardware interrupt handling (PIC, PIT, Keyboard)\n");
+    vga::write_str("  - Memory management (frame allocator, heap)\n");
+    vga::write_str("  - VGA text mode with color support\n");
+    vga::write_str("  - Serial port debugging (COM1)\n");
+    vga::write_str("  - CPU feature detection (CPUID)\n");
+    vga::write_str("  - Interactive command system\n");
+    vga::write_str("  - Framebuffer graphics support\n\n");
+
+    vga::write_str("License:      MIT\n");
+    vga::write_str("Repository:   github.com/m4rcel-lol/m5rOS\n\n");
+}
+
+/// Echo text to screen
+fn cmd_echo(text: &str) {
+    if !text.is_empty() {
+        vga::write_str(text);
+    }
+    vga::write_str("\n");
+}
+
+/// Display kernel statistics
+fn cmd_stats() {
+    vga::write_str("\nKernel Statistics:\n");
+    vga::write_str("==================\n\n");
+
+    // IRQ statistics
+    vga::write_str("Hardware Interrupts (IRQs):\n");
+    vga::write_str("  Timer:    ");
+    format_u64(stats::IRQ_STATS.get_timer());
+    vga::write_str("\n");
+    vga::write_str("  Keyboard: ");
+    format_u64(stats::IRQ_STATS.get_keyboard());
+    vga::write_str("\n");
+    vga::write_str("  Total:    ");
+    format_u64(stats::IRQ_STATS.get_total());
+    vga::write_str("\n\n");
+
+    // Exception statistics
+    vga::write_str("CPU Exceptions:\n");
+    vga::write_str("  Divide Error:        ");
+    format_u64(stats::EXCEPTION_STATS.get_divide_error());
+    vga::write_str("\n");
+    vga::write_str("  Page Fault:          ");
+    format_u64(stats::EXCEPTION_STATS.get_page_fault());
+    vga::write_str("\n");
+    vga::write_str("  General Protection:  ");
+    format_u64(stats::EXCEPTION_STATS.get_general_protection());
+    vga::write_str("\n");
+    vga::write_str("  Total:               ");
+    format_u64(stats::EXCEPTION_STATS.get_total());
+    vga::write_str("\n\n");
+}
+
+/// Helper function to format u64 numbers
+fn format_u64(n: u64) {
+    let mut num = n;
+    let mut digits = [0u8; 20];
+    let mut count = 0;
+
+    if num == 0 {
+        vga::write_str("0");
+        return;
+    }
+
+    while num > 0 {
+        digits[count] = (num % 10) as u8 + b'0';
+        num /= 10;
+        count += 1;
+    }
+
+    // Print digits in reverse
+    for i in (0..count).rev() {
+        let buf = [digits[i]];
+        if let Ok(s) = core::str::from_utf8(&buf) {
+            vga::write_str(s);
+        }
+    }
 }

@@ -96,8 +96,8 @@ pub fn get_system_info() -> SystemInfo {
 
     SystemInfo {
         os_name: "m5rOS",
-        os_version: "0.1.0",
-        kernel_version: "0.1.0-dev",
+        os_version: "0.2.0",
+        kernel_version: "0.2.0-dev",
         uptime_seconds,
         cpu_vendor,
         cpu_features,

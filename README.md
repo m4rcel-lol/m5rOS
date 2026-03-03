@@ -2,9 +2,9 @@
 
 A custom operating system built from first principles in Rust and C, inspired by early UNIX and Linux.
 
-## Current Status: Foundation Phase (v0.1.0)
+## Current Status: Enhanced Foundation Phase (v0.2.0)
 
-m5rOS is in early development. The core build system and kernel skeleton have been established.
+m5rOS is in early development. The core build system, kernel skeleton, and interactive command system have been established.
 
 ### ✅ Implemented Components
 
@@ -16,11 +16,28 @@ m5rOS is in early development. The core build system and kernel skeleton have be
 - Linker script for kernel memory layout
 
 #### Kernel Core
-- **Kernel entry point** with basic initialization
+- **Kernel entry point** with comprehensive initialization
 - **Serial port driver** (16550 UART) for debugging output via COM1
-- **Panic handler** for kernel crashes
-- **Port I/O operations** for hardware access (inb/outb/inw/outw)
+- **VGA text mode driver** (80x25, 16 colors) with optimized scrolling
+- **Panic handler** for kernel crashes with detailed output
+- **Port I/O operations** for hardware access (inb/outb/inw/outw/inl/outl)
 - **Physical frame allocator** using bitmap-based allocation (4 KiB frames)
+- **Kernel heap allocator** (linked-list) with 16MB heap space
+- **CPU feature detection** (CPUID) for vendor and capabilities
+- **GDT & IDT** with 21 exception handlers and hardware interrupt support
+- **PIC, PIT, PS/2 keyboard** drivers fully functional
+
+#### Interactive Command System
+- **Command parser** with keyboard input buffering
+- **Built-in commands**: fetch, help, clear, uptime, meminfo, cpuinfo, version, about, echo, stats
+- **fastfetch-like system information** display with ASCII art
+- **Statistics tracking** for IRQs and exceptions
+- **Color-coded output** for better readability
+
+#### Graphics Support
+- **Framebuffer driver** with RGB/BGR pixel format support
+- **8x8 bitmap font** for text rendering
+- **Drawing primitives** (pixel, line, rectangle, fill)
 
 ### 🚧 In Progress
 
