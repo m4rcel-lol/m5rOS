@@ -57,6 +57,11 @@ pub fn ticks() -> u64 {
     TICKS.load(Ordering::Relaxed)
 }
 
+/// Alias for ticks()
+pub fn get_ticks() -> u64 {
+    ticks()
+}
+
 /// Get elapsed time in milliseconds since boot
 #[allow(dead_code)]
 pub fn uptime_ms() -> u64 {

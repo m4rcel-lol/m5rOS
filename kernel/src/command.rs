@@ -6,6 +6,8 @@ use crate::drivers::vga;
 use crate::sysinfo;
 use crate::stats;
 use crate::drivers::rtc;
+use crate::fs;
+use crate::editor;
 
 /// Maximum command buffer size
 const CMD_BUF_SIZE: usize = 256;
@@ -91,6 +93,13 @@ pub fn execute_command(cmd: &str) {
         "reboot" => cmd_reboot(),
         "shutdown" => cmd_shutdown(),
         "heap" => cmd_heap(),
+        "ls" => cmd_ls(),
+        "cat" => cmd_cat(rest),
+        "mkdir" => cmd_mkdir(rest),
+        "touch" => cmd_touch(rest),
+        "rm" => cmd_rm(rest),
+        "edit" => cmd_edit(rest),
+        "install-m5ros" => cmd_install(),
         _ => {
             vga::write_str("Unknown command: ");
             vga::write_str(command);
@@ -195,22 +204,49 @@ fn cmd_fetch() {
 
 /// Display help information
 fn cmd_help() {
-    vga::write_str("\nAvailable commands:\n");
+    vga::write_str("\nAvailable commands:\n\n");
+
+    vga::set_color(vga::Color::LightCyan, vga::Color::Black);
+    vga::write_str("System Information:\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
     vga::write_str("  fetch    - Display system information\n");
     vga::write_str("  help     - Display this help message\n");
-    vga::write_str("  clear    - Clear the screen\n");
     vga::write_str("  uptime   - Display system uptime\n");
     vga::write_str("  meminfo  - Display memory information\n");
     vga::write_str("  cpuinfo  - Display CPU information\n");
     vga::write_str("  version  - Display OS version\n");
     vga::write_str("  about    - Display OS information\n");
-    vga::write_str("  echo     - Echo text to screen\n");
     vga::write_str("  stats    - Display kernel statistics\n");
     vga::write_str("  date     - Display current date\n");
     vga::write_str("  time     - Display current time\n");
-    vga::write_str("  heap     - Display heap statistics\n");
+    vga::write_str("  heap     - Display heap statistics\n\n");
+
+    vga::set_color(vga::Color::LightCyan, vga::Color::Black);
+    vga::write_str("File Operations:\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str("  ls       - List files and directories\n");
+    vga::write_str("  cat      - Display file contents\n");
+    vga::write_str("  mkdir    - Create a directory\n");
+    vga::write_str("  touch    - Create an empty file\n");
+    vga::write_str("  rm       - Remove a file\n");
+    vga::write_str("  edit     - Open file in text editor\n\n");
+
+    vga::set_color(vga::Color::LightCyan, vga::Color::Black);
+    vga::write_str("Utilities:\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str("  clear    - Clear the screen\n");
+    vga::write_str("  echo     - Echo text to screen\n\n");
+
+    vga::set_color(vga::Color::LightCyan, vga::Color::Black);
+    vga::write_str("Power Management:\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
     vga::write_str("  reboot   - Reboot the system\n");
-    vga::write_str("  shutdown - Shutdown the system\n");
+    vga::write_str("  shutdown - Shutdown the system\n\n");
+
+    vga::set_color(vga::Color::LightCyan, vga::Color::Black);
+    vga::write_str("System Installation:\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str("  install-m5ros - Install m5rOS to disk\n");
     vga::write_str("\n");
 }
 
@@ -471,4 +507,249 @@ fn cmd_heap() {
     vga::write_str("Not yet initialized\n");
     vga::set_color(vga::Color::White, vga::Color::Black);
     vga::write_str("(Heap initialization pending bootloader completion)\n\n");
+}
+
+/// List files and directories
+fn cmd_ls() {
+    vga::write_str("\nFiles and Directories:\n");
+    vga::write_str("======================\n\n");
+
+    let filesystem = fs::get_fs();
+    let files = filesystem.list_files();
+
+    if files.is_empty() {
+        vga::write_str("No files found.\n\n");
+        return;
+    }
+
+    for file in files.iter() {
+        if !file.in_use {
+            continue;
+        }
+
+        if file.is_directory {
+            vga::set_color(vga::Color::LightBlue, vga::Color::Black);
+            vga::write_str("[DIR]  ");
+        } else {
+            vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+            vga::write_str("[FILE] ");
+        }
+
+        vga::set_color(vga::Color::White, vga::Color::Black);
+        vga::write_str(file.name_as_str());
+
+        if !file.is_directory {
+            vga::write_str("  (");
+            format_u64(file.size as u64);
+            vga::write_str(" bytes)");
+        }
+
+        vga::write_str("\n");
+    }
+
+    vga::write_str("\n");
+}
+
+/// Display file contents
+fn cmd_cat(filename: &str) {
+    if filename.is_empty() {
+        vga::write_str("\nUsage: cat <filename>\n\n");
+        return;
+    }
+
+    let filesystem = fs::get_fs();
+
+    if let Some(idx) = filesystem.find_file(filename) {
+        if let Some(data) = filesystem.read_file(idx) {
+            vga::write_str("\n");
+            if let Ok(content) = core::str::from_utf8(data) {
+                vga::write_str(content);
+            } else {
+                vga::write_str("[Binary file - cannot display]\n");
+            }
+            vga::write_str("\n\n");
+        } else {
+            vga::write_str("\nError: Cannot read file (is it a directory?)\n\n");
+        }
+    } else {
+        vga::write_str("\nError: File not found\n\n");
+    }
+}
+
+/// Create a directory
+fn cmd_mkdir(dirname: &str) {
+    if dirname.is_empty() {
+        vga::write_str("\nUsage: mkdir <directory>\n\n");
+        return;
+    }
+
+    let filesystem = fs::get_fs();
+
+    match filesystem.create_dir(dirname) {
+        Ok(_) => {
+            vga::write_str("\nDirectory created: ");
+            vga::write_str(dirname);
+            vga::write_str("\n\n");
+        }
+        Err(e) => {
+            vga::write_str("\nError: ");
+            vga::write_str(e);
+            vga::write_str("\n\n");
+        }
+    }
+}
+
+/// Create an empty file
+fn cmd_touch(filename: &str) {
+    if filename.is_empty() {
+        vga::write_str("\nUsage: touch <filename>\n\n");
+        return;
+    }
+
+    let filesystem = fs::get_fs();
+
+    match filesystem.create_file(filename) {
+        Ok(_) => {
+            vga::write_str("\nFile created: ");
+            vga::write_str(filename);
+            vga::write_str("\n\n");
+        }
+        Err(e) => {
+            vga::write_str("\nError: ");
+            vga::write_str(e);
+            vga::write_str("\n\n");
+        }
+    }
+}
+
+/// Remove a file
+fn cmd_rm(filename: &str) {
+    if filename.is_empty() {
+        vga::write_str("\nUsage: rm <filename>\n\n");
+        return;
+    }
+
+    let filesystem = fs::get_fs();
+
+    if let Some(idx) = filesystem.find_file(filename) {
+        match filesystem.delete_file(idx) {
+            Ok(_) => {
+                vga::write_str("\nFile removed: ");
+                vga::write_str(filename);
+                vga::write_str("\n\n");
+            }
+            Err(e) => {
+                vga::write_str("\nError: ");
+                vga::write_str(e);
+                vga::write_str("\n\n");
+            }
+        }
+    } else {
+        vga::write_str("\nError: File not found\n\n");
+    }
+}
+
+/// Open file in text editor
+fn cmd_edit(filename: &str) {
+    if filename.is_empty() {
+        vga::write_str("\nUsage: edit <filename>\n\n");
+        vga::write_str("Opens a vi-like text editor.\n");
+        vga::write_str("Controls:\n");
+        vga::write_str("  i - insert mode\n");
+        vga::write_str("  ESC - normal mode\n");
+        vga::write_str("  hjkl - move cursor\n");
+        vga::write_str("  :w - save\n");
+        vga::write_str("  :q - quit\n");
+        vga::write_str("  :wq - save and quit\n\n");
+        return;
+    }
+
+    vga::write_str("\nOpening editor for: ");
+    vga::write_str(filename);
+    vga::write_str("\n\n");
+
+    vga::set_color(vga::Color::Yellow, vga::Color::Black);
+    vga::write_str("Note: Full editor integration requires keyboard event system.\n");
+    vga::write_str("Editor framework is implemented - awaiting integration.\n\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+
+    // In a full implementation, this would call:
+    // editor::run_editor(Some(filename));
+}
+
+/// Install m5rOS to disk
+fn cmd_install() {
+    vga::clear_screen();
+    vga::set_color(vga::Color::LightCyan, vga::Color::Black);
+    vga::write_str("\n");
+    vga::write_str("===============================================\n");
+    vga::write_str("        m5rOS System Installer v0.2.0\n");
+    vga::write_str("===============================================\n\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+
+    vga::write_str("Welcome to the m5rOS installation wizard!\n\n");
+
+    vga::set_color(vga::Color::Yellow, vga::Color::Black);
+    vga::write_str("WARNING: This will install m5rOS to your hard drive.\n");
+    vga::write_str("All data on the target disk will be erased!\n\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+
+    vga::write_str("Installation Steps:\n");
+    vga::write_str("  1. Detect available disks\n");
+    vga::write_str("  2. Partition disk (GPT)\n");
+    vga::write_str("  3. Format partitions (EFI + m5fs)\n");
+    vga::write_str("  4. Install bootloader (UEFI)\n");
+    vga::write_str("  5. Copy kernel and system files\n");
+    vga::write_str("  6. Configure system\n\n");
+
+    vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+    vga::write_str("Current Status:\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+
+    // Detect ATA drive
+    vga::write_str("  [");
+    vga::set_color(vga::Color::LightBlue, vga::Color::Black);
+    vga::write_str("CHECK");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str("] Detecting ATA drives...\n");
+
+    unsafe {
+        match crate::drivers::ata::identify_drive() {
+            Ok(info) => {
+                vga::write_str("  [");
+                vga::set_color(vga::Color::LightGreen, vga::Color::Black);
+                vga::write_str("  OK ");
+                vga::set_color(vga::Color::White, vga::Color::Black);
+                vga::write_str("] Drive found: ");
+
+                if let Ok(model) = core::str::from_utf8(&info.model) {
+                    vga::write_str(model.trim());
+                }
+
+                vga::write_str("\n         Sectors: ");
+                format_u64(info.sectors);
+                vga::write_str("\n");
+            }
+            Err(_) => {
+                vga::write_str("  [");
+                vga::set_color(vga::Color::LightRed, vga::Color::Black);
+                vga::write_str("FAIL ");
+                vga::set_color(vga::Color::White, vga::Color::Black);
+                vga::write_str("] No drive detected\n");
+            }
+        }
+    }
+
+    vga::write_str("\n");
+    vga::set_color(vga::Color::Yellow, vga::Color::Black);
+    vga::write_str("Note: Full installation requires:\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
+    vga::write_str("  - Bootloader completion (UEFI)\n");
+    vga::write_str("  - Filesystem implementation (m5fs)\n");
+    vga::write_str("  - Disk partitioning tools (GPT)\n");
+    vga::write_str("  - Configuration management\n\n");
+
+    vga::set_color(vga::Color::LightCyan, vga::Color::Black);
+    vga::write_str("Installation framework ready - awaiting component completion.\n\n");
+    vga::set_color(vga::Color::White, vga::Color::Black);
 }

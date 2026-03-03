@@ -11,6 +11,9 @@ mod fmt;
 mod sysinfo;
 mod command;
 mod stats;
+mod boot_animation;
+mod editor;
+mod fs;
 
 /// Kernel entry point
 ///
@@ -95,8 +98,14 @@ pub extern "C" fn kernel_main() -> ! {
     // Note: Heap initialization requires proper paging setup first
     // This will be enabled once we have a working bootloader and paging
 
+    drivers::serial::write_str("Initializing filesystem...\n");
+    // Initialize simple filesystem
+    fs::init();
+
     drivers::serial::write_str("Kernel initialized successfully\n");
-    drivers::vga::write_str("Kernel initialized successfully!\n\n");
+
+    // Display boot animation
+    boot_animation::display_boot_animation();
 
     drivers::vga::set_color(drivers::vga::Color::LightGreen, drivers::vga::Color::Black);
     drivers::vga::write_str("All systems operational.\n");
