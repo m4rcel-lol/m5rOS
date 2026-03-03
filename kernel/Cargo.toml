@@ -1,0 +1,13 @@
+[package]
+name = "m5r-kernel"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+spin = "0.9"
+bitflags = "2.4"
+
+[dependencies.lazy_static]
+version = "1.4"
+features = ["spin_no_std"]
