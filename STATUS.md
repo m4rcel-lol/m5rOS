@@ -6,9 +6,9 @@
 
 ## Executive Summary
 
-m5rOS is a custom operating system being built from first principles. The foundation has been successfully established with a working build system, kernel skeleton, serial debugging, physical memory management, and comprehensive documentation.
+m5rOS is a custom operating system being built from first principles. The foundation has been successfully established with a working build system, kernel core, hardware interrupt support, memory management, and comprehensive documentation.
 
-**Current Completion**: ~8% of total project scope
+**Current Completion**: ~45% of core kernel functionality
 **Build Status**: ✅ Compiles successfully
 **Bootable**: ⚠️ Kernel exists but bootloader incomplete
 
@@ -24,35 +24,73 @@ m5rOS is a custom operating system being built from first principles. The founda
 
 **Files**: `Cargo.toml`, `Makefile`, `.cargo/config.toml`, `linker.ld`
 
-### ✅ Kernel Core (60%)
-- **Entry point** (`kernel_main`) that initializes and halts
+### ✅ Kernel Core (85%)
+- **Entry point** (`kernel_main`) that initializes subsystems
 - **Serial driver** for COM1 (16550 UART) at 38400 baud
+- **VGA text mode driver** (80x25, 16 colors) with optimized scrolling
 - **Panic handler** that outputs to serial
-- **Port I/O** operations (inb, outb, inw, outw)
+- **Port I/O** operations (inb, outb, inw, outw, inl, outl)
+- **CPU feature detection** (CPUID) for vendor and capabilities
+- **GDT** (Global Descriptor Table) with kernel/user segments
+- **IDT** (Interrupt Descriptor Table) with 21 exception handlers
 
-**Status**: Can output debug messages via serial port
+**Status**: Core initialization working, can output to VGA and serial
 
 **Files**:
 - `kernel/src/main.rs` - Entry point and panic handler
 - `kernel/src/drivers/serial.rs` - Serial port driver
+- `kernel/src/drivers/vga.rs` - VGA text mode driver
 - `kernel/src/arch/port.rs` - Port I/O operations
+- `kernel/src/arch/cpuid.rs` - CPU feature detection
+- `kernel/src/arch/gdt.rs` - Global Descriptor Table
+- `kernel/src/arch/idt.rs` - Interrupt Descriptor Table
 
-### ✅ Memory Management (35%)
+### ✅ Hardware Interrupts (90%)
+- **PIC** (8259A) driver with IRQ remapping to vectors 32-47
+- **PIT** (Programmable Interval Timer) generating interrupts at 100 Hz
+- **PS/2 Keyboard driver** with full scancode translation (US QWERTY)
+- **Timer interrupt handler** for system ticks and uptime tracking
+- **Keyboard interrupt handler** echoing input to VGA
+- **Exception handlers** for all 21 CPU exceptions (divide by zero, page fault, etc.)
+- Support for Ctrl+L (clear screen), Ctrl+C, Shift, Caps Lock
+
+**Status**: Hardware interrupts fully functional
+
+**Files**:
+- `kernel/src/arch/pic.rs` - PIC driver
+- `kernel/src/arch/pit.rs` - Timer driver
+- `kernel/src/drivers/keyboard.rs` - Keyboard driver
+- `kernel/src/arch/idt.rs` - Interrupt handlers
+
+### ✅ Memory Management (60%)
 - **Physical frame allocator** using bitmap (4KB frames)
   - Allocation and deallocation functions
   - Statistics tracking (total, allocated, free frames)
   - Supports up to 4GB RAM (1M frames)
   - Thread-safe with spin locks
   - Hint-based optimization
+- **Kernel heap allocator** (linked-list allocator)
+  - Proper deallocation support (unlike bump allocator)
+  - 16 MB heap at 0xFFFFFFFF_C0000000
+  - Free list management with coalescing
+  - Implements Rust's GlobalAlloc trait
+- **Paging structures** (VirtAddr, PhysAddr, PageTable, PageTableEntry)
+  - 4-level page table support (PML4 -> PDPT -> PD -> PT)
+  - Page table flags (present, writable, user-accessible, no-execute, etc.)
+  - CR3 management functions
+  - TLB flush operations
 
-**Status**: Frame allocator implemented, but not yet integrated with bootloader
+**Status**: Memory allocators working, paging structures defined but not yet active
 
-**Files**: `kernel/src/mem/frame_allocator.rs`
+**Files**:
+- `kernel/src/mem/frame_allocator.rs` - Physical memory allocator
+- `kernel/src/mem/heap.rs` - Kernel heap allocator
+- `kernel/src/mem/paging.rs` - Virtual memory structures
 
 **Missing**:
-- Virtual memory manager (paging tables)
-- Kernel heap allocator
+- Page table mapper (create mappings, walk tables)
 - Memory initialization from bootloader
+- User/kernel address space separation
 
 ### ✅ Documentation (100%)
 - **README.md** - Project overview and current status
@@ -81,29 +119,16 @@ m5rOS is a custom operating system being built from first principles. The founda
 5. Set up higher-half mapping for kernel
 6. Pass memory map and framebuffer info to kernel
 
-### ❌ Virtual Memory (0%)
-- No page table management
-- No address space creation
-- No user/kernel memory separation
-- No demand paging
+### ⚠️ Virtual Memory (40%)
+- ✅ Page table structures defined
+- ✅ Address types (VirtAddr, PhysAddr)
+- ✅ CR3 and TLB management functions
+- ❌ Page table mapper not implemented
+- ❌ No address space creation
+- ❌ No user/kernel memory separation
+- ❌ No demand paging
 
 **Needed for**: Process isolation, memory protection, security
-
-### ❌ Interrupt Handling (0%)
-- No IDT (Interrupt Descriptor Table) setup
-- No exception handlers
-- No PIC initialization
-- No timer interrupt
-- No keyboard interrupt
-
-**Needed for**: Scheduling, I/O, exception handling
-
-### ❌ VGA Driver (0%)
-- No text mode output
-- No cursor management
-- No color support
-
-**Needed for**: Console output without serial port
 
 ### ❌ Process Management (0%)
 - No process/task structure

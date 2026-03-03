@@ -21,6 +21,9 @@ pub extern "C" fn kernel_main() -> ! {
     // Print boot message
     drivers::serial::write_str("m5rOS v0.1.0 - Booting...\n");
 
+    // Print CPU information
+    arch::cpuid::print_cpu_info();
+
     // Initialize VGA text mode
     // SAFETY: This is called once during kernel initialization
     unsafe {

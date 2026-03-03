@@ -119,11 +119,13 @@ impl Writer {
 
     /// Move to a new line, scrolling if necessary
     fn new_line(&mut self) {
-        // Scroll all lines up by one
-        for row in 1..BUFFER_HEIGHT {
-            for col in 0..BUFFER_WIDTH {
-                self.buffer.chars[row - 1][col] = self.buffer.chars[row][col];
-            }
+        // Scroll all lines up by one using unsafe copy for better performance
+        // SAFETY: The source and destination don't overlap, and both are valid memory
+        unsafe {
+            let src = self.buffer.chars[1].as_ptr();
+            let dst = self.buffer.chars[0].as_mut_ptr();
+            let count = BUFFER_WIDTH * (BUFFER_HEIGHT - 1);
+            core::ptr::copy(src, dst, count);
         }
         // Clear the last line
         self.clear_row(BUFFER_HEIGHT - 1);
